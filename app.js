@@ -1,0 +1,711 @@
+/* ===========================================================
+   Sea Trouble System — DM Tool
+   =========================================================== */
+
+const STORAGE_KEY = 'seaTroubleSystem.v1';
+
+/* ---------- Default state ---------- */
+const DEFAULT_RANSOM = [
+  { name: "The Coral Eye",        curse: "Whispering Tides",     effect: "Holder dreams of drowning sailors begging for help." },
+  { name: "The Bone Compass",     curse: "False North",          effect: "Compasses near it lie. The holder always knows where the next piece is." },
+  { name: "The Salt Crown",       curse: "Throne Hunger",        effect: "Holder feels they deserve obedience. NPCs find them oddly imposing." },
+  { name: "The Black Pearl Tooth",curse: "Bite of the Deep",     effect: "Saltwater tastes like blood. Sharks follow the ship." },
+  { name: "The Iron Sigil",       curse: "Marine Echo",          effect: "Marines instinctively recognize the holder as a wanted face." },
+  { name: "The Sun-Drowned Lens", curse: "Burning Memory",       effect: "Holder relives a stranger's death every time they sleep." },
+  { name: "The Whaler's Knot",    curse: "Unsnapping Promise",   effect: "Any oath sworn while holding it physically binds — until broken at terrible cost." },
+  { name: "The Drowned Bell",     curse: "Tolling Hour",         effect: "Rings faintly when a lie is told nearby." },
+  { name: "The Captain's Tongue", curse: "Words of the Lost",    effect: "Holder occasionally speaks in a dead pirate king's voice." },
+  { name: "The Tidewriter's Quill",curse: "Ink of Fate",         effect: "Anything written with it tends to come true — twisted." },
+  { name: "The Glass Heart",      curse: "Mirror of Want",       effect: "Holder sees what they most desire in every reflection." },
+  { name: "The Kraken's Coin",    curse: "Debt of Ten Fathoms",  effect: "Sea itself seems to demand payment. Storms gather over the holder." },
+  { name: "The Puzzle Key Core",  curse: "Final Ransom",         effect: "When the 13th piece is held, the artifact awakens. Reality begins to bend around the crew." },
+];
+
+const DEFAULT_STATE = {
+  campaignName: "The Devil's Ransom",
+  location: "East Blue — Open Sea",
+  danger: 2,
+  heat: 0,
+  piecesHeld: 0,
+  clock: 0,
+  partyLevel: 3,
+  partySize: 4,
+  faction: "Free pirates",
+  marinePresence: "Light patrols",
+  rivalPirates: "Buggy splinter crew",
+  localProblem: "Smuggling ring under the docks",
+  ransomClue: "A torn map fragment shows a key-shaped island in the fog.",
+  ransom: DEFAULT_RANSOM.map(p => ({ ...p, holder: "", claimed: false, clueLoc: "", rumors: "" })),
+  islands: [],
+  log: [],
+};
+
+let state = load();
+
+/* ---------- Persistence ---------- */
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return structuredClone(DEFAULT_STATE);
+    const parsed = JSON.parse(raw);
+    // merge with defaults to allow new fields
+    return Object.assign(structuredClone(DEFAULT_STATE), parsed);
+  } catch {
+    return structuredClone(DEFAULT_STATE);
+  }
+}
+function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+/* ---------- Utility ---------- */
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+const roll = n => Math.floor(Math.random()*n)+1;
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const uid = () => Math.random().toString(36).slice(2,10);
+
+const DANGER_LABELS = { 1:"Safe or familiar area", 2:"Risky area", 3:"Dangerous area", 4:"Deadly area", 5:"Nightmare area" };
+const HEAT_LABELS   = { 0:"Unknown crew", 1:"Local troublemakers", 2:"Wanted in one region", 3:"Known pirate crew", 4:"Major threat", 5:"Government priority target" };
+
+/* ===========================================================
+   Tab navigation
+   =========================================================== */
+$$('#tabs .tab').forEach(t => t.addEventListener('click', () => {
+  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
+  $$('.panel').forEach(p => p.classList.remove('active'));
+  t.classList.add('active');
+  $('#tab-' + t.dataset.tab).classList.add('active');
+}));
+
+/* ===========================================================
+   Two-way binding for dashboard fields
+   =========================================================== */
+function bindFields() {
+  $$('[data-bind]').forEach(el => {
+    const key = el.dataset.bind;
+    if (state[key] !== undefined) el.value = state[key];
+    el.addEventListener('input', () => {
+      let v = el.value;
+      if (el.type === 'number') v = Number(v) || 0;
+      if (key === 'danger') v = clamp(Number(v),1,5);
+      if (key === 'heat')   v = clamp(Number(v),0,5);
+      if (key === 'piecesHeld') v = clamp(Number(v),0,13);
+      if (key === 'clock')  v = clamp(Number(v),0,6);
+      state[key] = v;
+      save();
+      refreshStats();
+    });
+  });
+}
+
+/* ===========================================================
+   Refresh top-level stat displays
+   =========================================================== */
+function refreshStats() {
+  $('#stat-danger').textContent = state.danger;
+  $('#stat-danger-label').textContent = DANGER_LABELS[state.danger];
+  $('#stat-heat').textContent = state.heat;
+  $('#stat-heat-label').textContent = HEAT_LABELS[state.heat];
+  $('#stat-pieces').textContent = `${state.piecesHeld} / 13`;
+  $('#stat-dc').textContent = 10 + Number(state.piecesHeld);
+
+  // Clock
+  $('#clock-val').textContent = state.clock;
+  $('#clock-fill').style.width = (state.clock/6*100) + '%';
+  $('#clock-alert').classList.toggle('hidden', state.clock < 6);
+
+  // Heat tab
+  $('#heat-val').textContent = state.heat;
+  $('#heat-fill').style.width = (state.heat/5*100) + '%';
+  $('#heat-label-big').textContent = HEAT_LABELS[state.heat];
+
+  // Ransom
+  $('#ransom-dc').textContent = 10 + Number(state.piecesHeld);
+  $('#ransom-count').textContent = state.piecesHeld;
+}
+
+/* ===========================================================
+   Encounter Clock buttons
+   =========================================================== */
+$$('[data-clock]').forEach(b => b.addEventListener('click', () => {
+  state.clock = clamp(state.clock + Number(b.dataset.clock), 0, 6);
+  save(); refreshStats();
+  if (state.clock >= 6) flashTab('clock');
+}));
+
+/* ===========================================================
+   Heat buttons
+   =========================================================== */
+$$('[data-heat]').forEach(b => b.addEventListener('click', () => {
+  state.heat = clamp(state.heat + Number(b.dataset.heat), 0, 5);
+  syncBoundField('heat');
+  save(); refreshStats();
+}));
+
+function syncBoundField(key) {
+  const el = $(`[data-bind="${key}"]`);
+  if (el) el.value = state[key];
+}
+
+/* ===========================================================
+   Action buttons
+   =========================================================== */
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-action]');
+  if (!a) return;
+  const act = a.dataset.action;
+  switch (act) {
+    case 'generate':       generateEncounter(); break;
+    case 'ransomTwist':    generateRansomTwist(true); break;
+    case 'genMarine':      generateEncounter('Marine patrol'); break;
+    case 'genRival':       generateEncounter('Rival pirates'); break;
+    case 'genSea':         generateEncounter(pick(['Sea monster','Weather disaster'])); break;
+    case 'genIsland':      generateEncounter(pick(['Strange island event','Civilian problem','Local faction conflict'])); break;
+    case 'genNPC':         showQuickCard('NPC', generateNPC()); break;
+    case 'genReward':      showQuickCard('Reward', generateReward()); break;
+    case 'resetClock':     state.clock = 0; syncBoundField('clock'); save(); refreshStats(); break;
+    case 'manualMinus':    state.clock = clamp(state.clock-1,0,6); syncBoundField('clock'); save(); refreshStats(); break;
+    case 'heatPlus':       state.heat = clamp(state.heat+1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
+    case 'heatMinus':      state.heat = clamp(state.heat-1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
+    case 'newIsland':      addIsland(); break;
+    case 'exportAll':      exportSave(); break;
+    case 'importAll':      importSave(); break;
+    case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } break;
+  }
+});
+
+function flashTab(name) {
+  const t = $(`#tabs .tab[data-tab="${name}"]`);
+  if (!t) return;
+  t.style.boxShadow = '0 0 0 3px #f5c75a';
+  setTimeout(()=> t.style.boxShadow = '', 1500);
+}
+
+/* ===========================================================
+   ENCOUNTER GENERATOR
+   =========================================================== */
+const ENCOUNTER_TYPES = [
+  "Marine patrol","Rival pirates","Bounty hunter","Sea monster",
+  "Weather disaster","Strange island event","Civilian problem","Treasure clue",
+  "Devil's Ransom curse pull","Enemy spy or informant","Local faction conflict","Major story encounter"
+];
+
+const PURPOSES = {
+  Drain: "Uses resources — HP, ammo, ship damage, medicine, supplies, or time.",
+  Reveal: "Gives lore, clues, names, maps, rumors, or secrets.",
+  Tempt: "Offers treasure, fame, revenge, power, or a risky shortcut.",
+  Chase: "Pushes the crew to move quickly.",
+  Choice: "Forces the players to choose between difficult options.",
+  Consequence: "Shows that past actions matter."
+};
+
+const NPC_FIRST = ["Reina","Borgo","Hatchi","Kessler","Mira","Old Pim","Cinder","Vance","Selka","Doc Maro","Tobias","Yumi","Saint Halric","Captain Quill","Bosun Greaves","Lady Asha","Gunner Tess","Iron-Eye Joss","Pearl","Mako"];
+const NPC_TITLES = ["the Drifter","the Two-Coin","the Quiet","of the Ash Sails","the Reefborn","the Marked","the Salt-Tongue","the Black Hand","the Penitent","the Tide-Walker","the Last Mate","of the Iron Lantern"];
+const NPC_ROLES  = ["wandering swordsman","corrupt Marine ensign","retired bounty hunter","cursed cartographer","blind navigator","starving informant","ex-pirate cook","mysterious noble's bodyguard","preacher of a sea-god","child with strange knowledge","crooked merchant","ruthless tax collector"];
+const NPC_TRAITS = ["lies fluently","always indebted","carries a relic they can't sell","sees omens in fish bones","laughs at the wrong moments","has a tattoo of a forgotten flag","missing two fingers","whistles a marching song","afraid of bells","loyal to a dead captain"];
+
+const REWARDS_MINOR  = ["A waterproof map fragment","A pouch of 200 berries","A bottle of strong rum","Marine ration crates","A spyglass with cracked lens","A child's lucky charm","A bag of exotic spices","A signal flare","Three healing herbs","A bone whistle that calls gulls"];
+const REWARDS_MEDIUM = ["A named cutlass with a small enchantment","A reinforced ship plank (small ship repair)","A tattered Marine officer's uniform","Coded letters between officers","A small Sea Stone shard","A treasure deed to a nameless island","A trained messenger bird","A favor owed by a smuggler captain"];
+const REWARDS_MAJOR  = ["A clue to the next Devil's Ransom piece","A canister of Sea Stone dust","A rare Devil Fruit (uncut, dangerous)","The deed to a hidden cove","An audience with a Yonko's informant","A WANTED poster rewritten in the crew's favor","A pact with a sea spirit"];
+
+const HOOKS = {
+  "Marine patrol": ["A Marine cutter signals the crew to halt for inspection.","Smoke rises from a Marine watchtower on the coast.","A Marine deserter begs for asylum aboard."],
+  "Rival pirates": ["A black-sailed schooner shadows the crew at dawn.","A drunken pirate in port boasts of bounties — including the crew's.","A familiar flag flies over a 'neutral' tavern."],
+  "Bounty hunter": ["A polite stranger asks for a captain by name — quietly.","A poster of one crew member is being copied at every dock.","A bounty hunter is already waiting in the crew's favorite bar."],
+  "Sea monster": ["The water grows still. Birds vanish.","Something massive bumps the hull from below.","A wrecked ship floats by, its hull torn open from the inside out."],
+  "Weather disaster": ["The sky turns green; the air smells of iron.","Three waterspouts spin in a triangle around the ship.","The barometer drops faster than seems possible."],
+  "Strange island event": ["The island's shadows seem to fall the wrong way.","Bells ring from an island with no people on it.","A statue on the shore is wet — though it hasn't rained."],
+  "Civilian problem": ["A child runs to the dock crying for help.","The local market is empty mid-day. Doors locked.","A fishing family begs the crew to escort them past the reef."],
+  "Treasure clue": ["A drunk sailor sells a 'real' map for the price of a meal.","A song the locals sing accidentally describes a buried route.","An old chart in a Marine office mentions an unmarked cove."],
+  "Devil's Ransom curse pull": ["A piece the crew carries grows warm without reason.","A stranger stares at the holder and whispers a name they never told.","Dreams of the same locked door return for everyone aboard."],
+  "Enemy spy or informant": ["A new recruit asks too many specific questions.","A message is intercepted with a code the crew once used.","A 'friendly' merchant insists on personal delivery."],
+  "Local faction conflict": ["Two gangs of dockworkers brawl in the streets.","A noble and a smuggler both demand the crew's loyalty.","A Marine officer and the local mayor have opposing requests."],
+  "Major story encounter": ["A figure from the captain's past walks into the tavern.","A Marine Vice Admiral's flagship enters the harbor.","A piece of the Devil's Ransom shines through a vault wall — visible only to the holder."]
+};
+
+const COMPLICATIONS = [
+  "A prisoner or civilian is caught in the middle.",
+  "A second faction is watching from cover.",
+  "The location is unstable — fire, flooding, or collapsing structure.",
+  "A Devil's Ransom piece begins reacting unpredictably.",
+  "Someone the party trusts is lying.",
+  "Time is against them — the Encounter Clock keeps ticking.",
+  "The 'enemy' is just desperate, not evil.",
+  "Marine reinforcements are visibly inbound.",
+  "A storm is closing in within the hour.",
+  "An NPC the crew wronged earlier shows up.",
+  "The reward is real — but cursed.",
+  "An obvious solution will burn a future bridge."
+];
+
+const PLAYER_CHOICES = [
+  "Fight openly, talk it out, or slip away unseen.",
+  "Help the desperate party and gain Heat, or stay clean and lose the lead.",
+  "Take the relic now, leave a clue for someone else, or destroy it.",
+  "Accept the deal, betray the dealer, or expose them publicly.",
+  "Rescue, loot, or hide — pick two.",
+  "Trust the stranger, test them, or hand them to the authorities.",
+  "Pay the bribe, fake the papers, or fight your way out.",
+  "Save the ship, save the cargo, or save the witness.",
+];
+
+const CONSEQUENCES = [
+  "Heat increases if witnesses survive.",
+  "A new ally appears — but expects a favor later.",
+  "A rival gains the next Devil's Ransom lead.",
+  "The crew's ship takes a lasting wound.",
+  "A bounty is rewritten — higher.",
+  "A friendly port closes to the crew for a season.",
+  "A Marine officer remembers a face.",
+  "A nightmare claims one crew member's next long rest.",
+  "A piece of the Devil's Ransom reacts publicly — witnesses talk.",
+  "Word reaches a Yonko's informant."
+];
+
+const COMBAT_NOTES = [
+  "Open terrain — ranged advantage.",
+  "Tight quarters — melee favored, hard to escape.",
+  "Vertical fight — rigging, ladders, scaffolds.",
+  "Crowd around — innocents at risk on misses.",
+  "Slippery deck — DEX save or fall prone on dash.",
+  "Visibility low — fog, smoke, or rain (disadvantage on ranged).",
+  "Environmental hazard each round — falling debris, rising water.",
+  "Reinforcements arrive on round 3 if combat continues."
+];
+
+const ROLEPLAY_NOTES = [
+  "NPC speaks slowly and watches faces — Insight is meaningful.",
+  "NPC is hiding fear with bravado.",
+  "NPC will break if pressed on a specific name.",
+  "NPC mirrors the loudest player.",
+  "NPC respects strength but distrusts charm.",
+  "NPC tests the crew with a small lie before truth.",
+  "NPC offers a deal that sounds fair — and isn't."
+];
+
+function generateNPC() {
+  return `${pick(NPC_FIRST)} "${pick(NPC_TITLES)}" — ${pick(NPC_ROLES)}. Trait: ${pick(NPC_TRAITS)}.`;
+}
+
+function generateReward(tier) {
+  const d = state.danger;
+  if (!tier) tier = d >= 4 ? 'major' : d >= 2 ? 'medium' : 'minor';
+  if (tier === 'major')  return pick(REWARDS_MAJOR);
+  if (tier === 'medium') return pick(REWARDS_MEDIUM);
+  return pick(REWARDS_MINOR);
+}
+
+function pickEnemies(type) {
+  const danger = state.danger;
+  const heat = state.heat;
+  const lvl = state.partyLevel;
+  const size = state.partySize;
+  const scale = `Scaled for level ${lvl} party of ${size}.`;
+  const prepared = heat >= 3 ? " They are PREPARED — they expected this crew." : "";
+  const namedHunter = heat >= 4 ? " A named officer or bounty hunter is present." : "";
+  const govt = heat >= 5 ? " A World Government agent observes from cover." : "";
+  const map = {
+    "Marine patrol":         `${1+danger*2} Marine sailors, 1 petty officer${danger>=3?", 1 lieutenant":""}${danger>=4?", reinforced with a small cutter":""}.${prepared}${namedHunter}${govt} ${scale}`,
+    "Rival pirates":         `${2+danger} rival pirates led by a brawler captain${danger>=3?", plus a specialist (gunner, navigator, or fighter)":""}.${prepared}${namedHunter} ${scale}`,
+    "Bounty hunter":         `A named bounty hunter and ${danger} hired thugs${heat>=4?", plus a Sea Stone trap":""}.${prepared} ${scale}`,
+    "Sea monster":           `A ${pick(["sea king juvenile","massive reef serpent","ink-blooded kraken","carnivorous tide swarm","ghost whale"])}${danger>=4?" — adult, hungry, and territorial":""}. ${scale}`,
+    "Weather disaster":      `No enemies — the sea itself is the threat. Skill challenge: navigate, brace, repair. ${scale}`,
+    "Strange island event":  `Local hazards and 1–2 cursed locals or wildlife. ${scale}`,
+    "Civilian problem":      `Frightened civilians; possibly ${danger} thugs pressuring them. ${scale}`,
+    "Treasure clue":         `No direct enemies; potential trap or rival scout. ${scale}`,
+    "Devil's Ransom curse pull": `No physical enemy — the artifact itself acts. Saves required.`,
+    "Enemy spy or informant":`1 disguised informant${heat>=3?", with a hidden backup pair":""}. ${scale}`,
+    "Local faction conflict":`${2+danger} fighters from each of two factions. ${scale}`,
+    "Major story encounter": `A signature antagonist appropriate to the campaign arc. ${scale}`,
+  };
+  return map[type] || "Improvise based on the location.";
+}
+
+function ransomTwistChance() {
+  // 0 pieces => 0%, 13 pieces => ~95%
+  return Math.min(0.95, state.piecesHeld * 0.07);
+}
+
+function maybeRansomTwist() {
+  if (Math.random() < ransomTwistChance()) return generateRansomTwist(false);
+  return null;
+}
+
+const CURSE_PRESSURE = [
+  "You feel like leaving this clue behind would be a mistake.",
+  "The artifact grows warm near the hidden clue.",
+  "The thought of selling the piece makes your stomach twist.",
+  "You cannot stop staring at the locked chest.",
+  "You know the pirate is lying, but part of you wants to follow him anyway.",
+  "A voice in your dream tonight will use your mother's voice.",
+  "The salt on your lips tastes like iron whenever the piece is near.",
+  "You feel watched by something that knows your real name.",
+  "Refusing the next offer feels physically painful.",
+  "You hear the puzzle key clicking — but no one else does."
+];
+
+function generateRansomTwist(asPanel) {
+  const dc = 10 + Number(state.piecesHeld);
+  const saveType = pick(["Wisdom","Charisma"]);
+  const reason = saveType === "Wisdom"
+    ? pick(["obsession","greed","curiosity","fear","temptation"])
+    : pick(["resisting control","resisting magical marking","being pulled toward the artifact"]);
+  const pressure = pick(CURSE_PRESSURE);
+  const twist = {
+    dc, saveType, reason, pressure,
+    text: `${saveType} save DC ${dc} vs ${reason}. On failure: ${pressure}`
+  };
+  if (asPanel) {
+    $('#ransom-twist-output').innerHTML = `
+      <div class="encounter-card">
+        <h2>💀 Devil's Ransom Curse Pressure</h2>
+        <div class="row"><b>${saveType} Save DC ${dc}</b> — vs ${reason}</div>
+        <div class="row twist">${pressure}</div>
+        <div class="row muted">The artifact does not control the player — it pressures, tempts, or whispers.</div>
+      </div>`;
+  }
+  return twist;
+}
+
+function generateEncounter(forcedType) {
+  const type = forcedType || pick(ENCOUNTER_TYPES);
+  const purpose = pick(Object.keys(PURPOSES));
+  const purpose2 = Math.random() < 0.35 ? pick(Object.keys(PURPOSES).filter(p => p !== purpose)) : null;
+  const purposes = purpose2 ? `${purpose} and ${purpose2}` : purpose;
+  const hook = pick(HOOKS[type] || ["Improvise based on location."]);
+  const complication = pick(COMPLICATIONS);
+  const choice = pick(PLAYER_CHOICES);
+  const enemies = pickEnemies(type);
+  const reward = generateReward();
+  const consequence = pick(CONSEQUENCES);
+
+  // Heat / Clock changes based on type & danger
+  const heatChange = (type === "Marine patrol" || type === "Bounty hunter") ? "+1 if combat goes loud"
+                  : (type === "Major story encounter") ? "+1 to +2"
+                  : (type === "Devil's Ransom curse pull") ? "0 (private)"
+                  : "0 to +1 depending on visibility";
+  const clockChange = "Reset to 0 after encounter resolves. Add +1 if loose ends remain.";
+
+  const difficulty = (() => {
+    const d = state.danger;
+    if (d <= 1) return "Easy";
+    if (d === 2) return "Standard";
+    if (d === 3) return "Hard";
+    if (d === 4) return "Deadly";
+    return "Nightmare — consider escape routes as a real path.";
+  })();
+
+  const nameAdj = pick(["Black","Drowning","Whispering","Iron","Salt-Bitten","Cursed","Half-Sunk","Gilded","Last","Quiet"]);
+  const nameNoun = pick(["Tide","Coffin","Bell","Lantern","Compass","Sail","Reef","Promise","Hour","Ledger"]);
+  const name = `The ${nameAdj} ${nameNoun}`;
+
+  const twist = maybeRansomTwist();
+  const ransomConnection = twist
+    ? `A piece of the Devil's Ransom reacts. ${twist.text}`
+    : (state.piecesHeld > 0 ? "Faint resonance only — no save this time." : "No direct connection.");
+
+  const combatNote = pick(COMBAT_NOTES);
+  const rpNote = pick(ROLEPLAY_NOTES);
+
+  const enc = {
+    id: uid(),
+    createdAt: new Date().toISOString(),
+    name,
+    location: state.location,
+    danger: state.danger,
+    type,
+    purpose: purposes,
+    purposeText: [purpose, purpose2].filter(Boolean).map(p => `${p}: ${PURPOSES[p]}`).join(' / '),
+    hook,
+    complication,
+    choice,
+    enemies,
+    reward,
+    consequence,
+    ransom: ransomConnection,
+    heatChange,
+    clockChange,
+    difficulty,
+    combatNote,
+    rpNote,
+    status: 'Unused',
+    notes: ''
+  };
+
+  renderEncounter(enc);
+  // Save to log
+  state.log.unshift(enc);
+  save();
+  renderLog();
+  // Switch view
+  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
+  $$('.panel').forEach(p => p.classList.remove('active'));
+  $('#tabs .tab[data-tab="generate"]').classList.add('active');
+  $('#tab-generate').classList.add('active');
+}
+
+function renderEncounter(enc) {
+  const html = `
+    <div class="encounter-card" data-eid="${enc.id}">
+      <h2>${enc.name}</h2>
+      <div class="tags">
+        <span class="tag">${enc.type}</span>
+        <span class="tag">Danger ${enc.danger}</span>
+        <span class="tag">Heat ${state.heat}</span>
+        <span class="tag">Difficulty: ${enc.difficulty}</span>
+      </div>
+      <div class="row"><b>Location:</b> ${esc(enc.location)}</div>
+      <div class="row"><b>Purpose:</b> ${esc(enc.purpose)} — <i>${esc(enc.purposeText)}</i></div>
+      <div class="row"><b>Hook:</b> ${esc(enc.hook)}</div>
+      <div class="row"><b>Complication:</b> ${esc(enc.complication)}</div>
+      <div class="row"><b>Player Choice:</b> ${esc(enc.choice)}</div>
+      <div class="row"><b>Enemies / NPCs:</b> ${esc(enc.enemies)}</div>
+      <div class="row"><b>Reward:</b> ${esc(enc.reward)}</div>
+      <div class="row"><b>Consequence:</b> ${esc(enc.consequence)}</div>
+      <div class="row twist"><b>Devil's Ransom Connection:</b> ${esc(enc.ransom)}</div>
+      <div class="row"><b>Heat Change:</b> ${esc(enc.heatChange)}</div>
+      <div class="row"><b>Encounter Clock Change:</b> ${esc(enc.clockChange)}</div>
+      <div class="row"><b>Combat Notes:</b> ${esc(enc.combatNote)}</div>
+      <div class="row"><b>Roleplay Notes:</b> ${esc(enc.rpNote)}</div>
+      <div class="btn-row">
+        <button class="gold" onclick="exportEncounter('${enc.id}')">📋 Export as Text</button>
+        <button onclick="rerollEncounter()">🎲 Reroll</button>
+        <button onclick="resetClockAfter()">Reset Clock to 0</button>
+      </div>
+    </div>`;
+  $('#encounter-output').innerHTML = html;
+}
+
+function showQuickCard(title, body) {
+  $('#encounter-output').innerHTML = `
+    <div class="encounter-card">
+      <h2>${title}</h2>
+      <div class="row">${esc(body)}</div>
+    </div>`;
+  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
+  $$('.panel').forEach(p => p.classList.remove('active'));
+  $('#tabs .tab[data-tab="generate"]').classList.add('active');
+  $('#tab-generate').classList.add('active');
+}
+
+function rerollEncounter() { generateEncounter(); }
+function resetClockAfter() { state.clock = 0; syncBoundField('clock'); save(); refreshStats(); }
+
+/* ===========================================================
+   EXPORT
+   =========================================================== */
+function encounterToText(enc) {
+  return [
+    `Encounter Name: ${enc.name}`,
+    `Location: ${enc.location}`,
+    `Danger Level: ${enc.danger}`,
+    `Encounter Type: ${enc.type}`,
+    `Purpose: ${enc.purpose}`,
+    `Hook: ${enc.hook}`,
+    `Complication: ${enc.complication}`,
+    `Player Choice: ${enc.choice}`,
+    `Enemies or NPCs: ${enc.enemies}`,
+    `Reward: ${enc.reward}`,
+    `Consequence: ${enc.consequence}`,
+    `Devil's Ransom Connection: ${enc.ransom}`,
+    `Heat Change: ${enc.heatChange}`,
+    `Encounter Clock Change: ${enc.clockChange}`,
+    `Suggested Difficulty: ${enc.difficulty}`,
+    `Optional Combat Notes: ${enc.combatNote}`,
+    `Optional Roleplay Notes: ${enc.rpNote}`
+  ].join('\n');
+}
+
+window.exportEncounter = function(id) {
+  const enc = state.log.find(e => e.id === id);
+  if (!enc) return;
+  const txt = encounterToText(enc);
+  navigator.clipboard?.writeText(txt).catch(()=>{});
+  // Also show in a popup-like overlay
+  const w = window.open('', '_blank', 'width=600,height=700');
+  if (w) {
+    w.document.write(`<pre style="font-family:Georgia,serif;padding:20px;white-space:pre-wrap;">${esc(txt)}</pre>`);
+    w.document.title = enc.name;
+  } else {
+    alert(txt);
+  }
+};
+
+function exportSave() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `sea-trouble-${Date.now()}.json`;
+  a.click();
+}
+
+function importSave() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json';
+  input.onchange = () => {
+    const f = input.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const data = JSON.parse(r.result);
+        state = Object.assign(structuredClone(DEFAULT_STATE), data);
+        save();
+        location.reload();
+      } catch (e) { alert('Invalid save file.'); }
+    };
+    r.readAsText(f);
+  };
+  input.click();
+}
+
+/* ===========================================================
+   RANSOM PIECE UI
+   =========================================================== */
+function renderRansom() {
+  const root = $('#ransom-list');
+  root.innerHTML = '';
+  state.ransom.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'ransom-piece' + (p.claimed ? ' claimed' : '');
+    div.innerHTML = `
+      <h4>${i+1}. ${esc(p.name)}</h4>
+      <div class="curse">Curse: ${esc(p.curse)}</div>
+      <div class="muted">${esc(p.effect)}</div>
+      <label><input type="checkbox" data-i="${i}" data-k="claimed" ${p.claimed?'checked':''}/> Claimed by the crew</label>
+      <label>Current Holder<input type="text" data-i="${i}" data-k="holder" value="${esc(p.holder)}"/></label>
+      <label>Clue Location<input type="text" data-i="${i}" data-k="clueLoc" value="${esc(p.clueLoc)}"/></label>
+      <label>Known Rumors<textarea data-i="${i}" data-k="rumors" rows="2">${esc(p.rumors)}</textarea></label>
+    `;
+    root.appendChild(div);
+  });
+  // Bind
+  $$('#ransom-list [data-i]').forEach(el => {
+    el.addEventListener('input', () => {
+      const i = Number(el.dataset.i), k = el.dataset.k;
+      state.ransom[i][k] = el.type === 'checkbox' ? el.checked : el.value;
+      // Sync piecesHeld count from claimed
+      state.piecesHeld = state.ransom.filter(p => p.claimed).length;
+      syncBoundField('piecesHeld');
+      save(); refreshStats();
+    });
+  });
+}
+
+/* ===========================================================
+   ISLANDS
+   =========================================================== */
+function addIsland() {
+  state.islands.push({
+    id: uid(),
+    name: "New Island", danger: "2", faction: "", marines: "", pirates: "",
+    problem: "", npcs: "", ransom: "", peaceful: "", dangerous: "",
+    strange: "", consequence: "", rewards: "", secret: ""
+  });
+  save(); renderIslands();
+}
+
+function renderIslands() {
+  const root = $('#island-list');
+  root.innerHTML = '';
+  if (!state.islands.length) {
+    root.innerHTML = '<p class="muted">No islands saved yet. Click "+ New Island" to create one.</p>';
+    return;
+  }
+  const tpl = $('#tpl-island');
+  state.islands.forEach((isl, idx) => {
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    node.dataset.idx = idx;
+    $$('[data-f]', node).forEach(el => {
+      const k = el.dataset.f;
+      el.value = isl[k] ?? '';
+      el.addEventListener('input', () => { state.islands[idx][k] = el.value; save(); });
+    });
+    $('[data-act="delete"]', node).addEventListener('click', () => {
+      if (confirm(`Delete "${isl.name}"?`)) { state.islands.splice(idx,1); save(); renderIslands(); }
+    });
+    $('[data-act="use"]', node).addEventListener('click', () => {
+      state.location = isl.name;
+      state.danger = Number(isl.danger) || state.danger;
+      state.faction = isl.faction || state.faction;
+      state.marinePresence = isl.marines || state.marinePresence;
+      state.rivalPirates = isl.pirates || state.rivalPirates;
+      state.localProblem = isl.problem || state.localProblem;
+      state.ransomClue = isl.ransom || state.ransomClue;
+      save();
+      ['location','danger','faction','marinePresence','rivalPirates','localProblem','ransomClue'].forEach(syncBoundField);
+      refreshStats();
+      alert(`Loaded "${isl.name}" as current location.`);
+    });
+    root.appendChild(node);
+  });
+}
+
+/* ===========================================================
+   LOG
+   =========================================================== */
+const STATUSES = ['Unused','Active','Resolved','Changed by player choice','Returning later'];
+
+function renderLog() {
+  const root = $('#log-list');
+  if (!state.log.length) { root.innerHTML = '<p class="muted">No encounters generated yet.</p>'; return; }
+  root.innerHTML = '';
+  state.log.forEach((enc, idx) => {
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    const date = new Date(enc.createdAt).toLocaleString();
+    div.innerHTML = `
+      <header>
+        <h4>${esc(enc.name)} <span class="muted">— ${esc(enc.type)} @ ${esc(enc.location)}</span></h4>
+        <span class="status">
+          <select data-idx="${idx}" data-k="status">
+            ${STATUSES.map(s => `<option ${s===enc.status?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </span>
+      </header>
+      <div class="muted">${date} · Danger ${enc.danger} · ${esc(enc.purpose)}</div>
+      <div><b>Hook:</b> ${esc(enc.hook)}</div>
+      <label>Notes<textarea data-idx="${idx}" data-k="notes" rows="2">${esc(enc.notes)}</textarea></label>
+      <div class="btn-row">
+        <button onclick="exportEncounter('${enc.id}')">📋 Export</button>
+        <button onclick="reshowEncounter('${enc.id}')">👁 View</button>
+        <button class="danger" onclick="deleteEncounter('${enc.id}')">Delete</button>
+      </div>`;
+    root.appendChild(div);
+  });
+  $$('#log-list [data-idx]').forEach(el => {
+    el.addEventListener('input', () => {
+      const i = Number(el.dataset.idx);
+      state.log[i][el.dataset.k] = el.value;
+      save();
+    });
+  });
+}
+
+window.reshowEncounter = function(id) {
+  const enc = state.log.find(e => e.id === id);
+  if (enc) { renderEncounter(enc); $$('#tabs .tab').forEach(x=>x.classList.remove('active')); $$('.panel').forEach(p=>p.classList.remove('active')); $('#tabs .tab[data-tab="generate"]').classList.add('active'); $('#tab-generate').classList.add('active'); }
+};
+window.deleteEncounter = function(id) {
+  if (!confirm('Delete this log entry?')) return;
+  state.log = state.log.filter(e => e.id !== id);
+  save(); renderLog();
+};
+
+/* ===========================================================
+   Utility
+   =========================================================== */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+/* ===========================================================
+   INIT
+   =========================================================== */
+bindFields();
+refreshStats();
+renderRansom();
+renderIslands();
+renderLog();
