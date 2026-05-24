@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sea Trouble System — One Piece DM Tool</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <h1>🏴‍☠️ Sea Trouble System</h1>
+  <p class="subtitle">A One Piece inspired Dungeon Master's deck</p>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="dashboard">Dashboard</button>
+  <button class="tab" data-tab="generate">Generate Encounter</button>
+  <button class="tab" data-tab="clock">Encounter Clock</button>
+  <button class="tab" data-tab="heat">Heat Tracker</button>
+  <button class="tab" data-tab="ransom">Devil's Ransom</button>
+  <button class="tab" data-tab="islands">Islands</button>
+  <button class="tab" data-tab="log">Encounter Log</button>
+  <button class="tab" data-tab="settings">Settings</button>
+</nav>
+
+<main id="main">
+
+  <!-- DASHBOARD -->
+  <section class="panel active" id="tab-dashboard">
+    <div class="parchment">
+      <h2>Campaign Setup</h2>
+      <div class="grid two">
+        <label>Campaign Name<input type="text" data-bind="campaignName" /></label>
+        <label>Current Island / Sea Route<input type="text" data-bind="location" /></label>
+        <label>Danger Level (1–5)
+          <select data-bind="danger">
+            <option value="1">1 — Safe / familiar</option>
+            <option value="2">2 — Risky</option>
+            <option value="3">3 — Dangerous</option>
+            <option value="4">4 — Deadly</option>
+            <option value="5">5 — Nightmare</option>
+          </select>
+        </label>
+        <label>Heat Level (0–5)
+          <select data-bind="heat">
+            <option value="0">0 — Unknown crew</option>
+            <option value="1">1 — Local troublemakers</option>
+            <option value="2">2 — Wanted in one region</option>
+            <option value="3">3 — Known pirate crew</option>
+            <option value="4">4 — Major threat</option>
+            <option value="5">5 — Government priority</option>
+          </select>
+        </label>
+        <label>Devil's Ransom Pieces Held (0–13)<input type="number" min="0" max="13" data-bind="piecesHeld" /></label>
+        <label>Encounter Clock (0–6)<input type="number" min="0" max="6" data-bind="clock" /></label>
+        <label>Party Level<input type="number" min="1" max="20" data-bind="partyLevel" /></label>
+        <label>Party Size<input type="number" min="1" max="10" data-bind="partySize" /></label>
+        <label>Major Faction<input type="text" data-bind="faction" /></label>
+        <label>Marine Presence<input type="text" data-bind="marinePresence" /></label>
+        <label>Rival Pirate Threat<input type="text" data-bind="rivalPirates" /></label>
+        <label>Local Problem<input type="text" data-bind="localProblem" /></label>
+        <label class="full">Current Devil's Ransom Clue<textarea data-bind="ransomClue" rows="2"></textarea></label>
+      </div>
+    </div>
+
+    <div class="grid three quick-stats">
+      <div class="parchment small">
+        <h3>Danger</h3>
+        <div class="big" id="stat-danger">1</div>
+        <div class="muted" id="stat-danger-label">Safe</div>
+      </div>
+      <div class="parchment small">
+        <h3>Heat</h3>
+        <div class="big" id="stat-heat">0</div>
+        <div class="muted" id="stat-heat-label">Unknown</div>
+      </div>
+      <div class="parchment small">
+        <h3>Ransom Pieces</h3>
+        <div class="big" id="stat-pieces">0 / 13</div>
+        <div class="muted">Save DC <span id="stat-dc">10</span></div>
+      </div>
+    </div>
+
+    <div class="parchment">
+      <h2>Quick Actions</h2>
+      <div class="btn-row">
+        <button class="gold" data-action="generate">⚔ Generate Encounter</button>
+        <button class="gold" data-action="ransomTwist">💀 Devil's Ransom Twist</button>
+        <button data-action="genMarine">Marine Patrol</button>
+        <button data-action="genRival">Rival Pirates</button>
+        <button data-action="genSea">Sea Event</button>
+        <button data-action="genIsland">Island Problem</button>
+        <button data-action="genNPC">Generate NPC</button>
+        <button data-action="genReward">Generate Reward</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GENERATE -->
+  <section class="panel" id="tab-generate">
+    <div class="parchment">
+      <h2>Encounter Generator</h2>
+      <p class="muted">Pulls from campaign state. Higher Danger = more serious. Higher Heat = enemies more prepared. More Ransom pieces = more cursed twists.</p>
+      <div class="btn-row">
+        <button class="gold" data-action="generate">⚔ Generate Encounter</button>
+        <button data-action="genMarine">Force: Marine Patrol</button>
+        <button data-action="genRival">Force: Rival Pirates</button>
+        <button data-action="genSea">Force: Sea Event</button>
+        <button data-action="genIsland">Force: Island Problem</button>
+      </div>
+    </div>
+    <div id="encounter-output"></div>
+  </section>
+
+  <!-- CLOCK -->
+  <section class="panel" id="tab-clock">
+    <div class="parchment">
+      <h2>Encounter Clock</h2>
+      <div class="clock-wrap">
+        <div class="clock-display"><span id="clock-val">0</span> / 6</div>
+        <div class="clock-bar"><div id="clock-fill"></div></div>
+      </div>
+      <div class="btn-row">
+        <button data-clock="1">+1 Long sea travel</button>
+        <button data-clock="1">+1 Searching for Ransom clues</button>
+        <button data-clock="1">+1 Public chaos</button>
+        <button data-clock="1">+1 Obvious powers in public</button>
+        <button data-clock="2">+2 Loud fight</button>
+        <button data-clock="2">+2 Stealing from Marines / nobles / pirates</button>
+        <button data-clock="2">+2 Claimed a Ransom piece</button>
+      </div>
+      <div class="btn-row">
+        <button class="gold" data-action="resetClock">Reset Clock to 0</button>
+        <button data-action="manualMinus">-1 Clock</button>
+      </div>
+      <div id="clock-alert" class="alert hidden">⚠ The Encounter Clock is FULL. An encounter has triggered!</div>
+    </div>
+  </section>
+
+  <!-- HEAT -->
+  <section class="panel" id="tab-heat">
+    <div class="parchment">
+      <h2>Heat Tracker</h2>
+      <div class="clock-wrap">
+        <div class="clock-display"><span id="heat-val">0</span> / 5</div>
+        <div class="clock-bar heat"><div id="heat-fill"></div></div>
+        <div class="muted" id="heat-label-big">Unknown crew</div>
+      </div>
+      <div class="btn-row">
+        <button data-heat="1">+1 Defeated Marines publicly</button>
+        <button data-heat="1">+1 Stole a ship or treasure</button>
+        <button data-heat="2">+2 Rescued a prisoner from execution</button>
+        <button data-heat="2">+2 Humiliated an important officer</button>
+        <button data-heat="1">+1 Claimed a Ransom piece in public</button>
+        <button data-heat="2">+2 Sank a Marine ship</button>
+      </div>
+      <div class="btn-row">
+        <button class="gold" data-action="heatPlus">+1 Heat</button>
+        <button data-action="heatMinus">-1 Heat (lay low)</button>
+      </div>
+      <div class="parchment inset">
+        <h3>Heat Effects</h3>
+        <ul>
+          <li><b>Heat 3+</b> — Enemies start preparing for the crew.</li>
+          <li><b>Heat 4+</b> — Named bounty hunters and stronger Marine officers appear.</li>
+          <li><b>Heat 5</b> — World Government / major Marine force actively involved.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- RANSOM -->
+  <section class="panel" id="tab-ransom">
+    <div class="parchment">
+      <h2>Devil's Ransom — 13 Cursed Pieces</h2>
+      <p class="muted">Save DC = 10 + pieces held. Current DC: <b id="ransom-dc">10</b>. Pieces held: <b id="ransom-count">0</b>/13.</p>
+      <div class="btn-row">
+        <button class="gold" data-action="ransomTwist">💀 Generate Curse Pressure</button>
+      </div>
+      <div id="ransom-twist-output"></div>
+    </div>
+    <div class="parchment">
+      <h2>The 13 Pieces</h2>
+      <div id="ransom-list" class="ransom-grid"></div>
+    </div>
+  </section>
+
+  <!-- ISLANDS -->
+  <section class="panel" id="tab-islands">
+    <div class="parchment">
+      <h2>Island Builder</h2>
+      <div class="btn-row">
+        <button class="gold" data-action="newIsland">+ New Island</button>
+      </div>
+      <div id="island-list"></div>
+    </div>
+  </section>
+
+  <!-- LOG -->
+  <section class="panel" id="tab-log">
+    <div class="parchment">
+      <h2>Saved Encounter Log</h2>
+      <div id="log-list"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="panel" id="tab-settings">
+    <div class="parchment">
+      <h2>Settings</h2>
+      <div class="btn-row">
+        <button data-action="exportAll">Export Save (JSON)</button>
+        <button data-action="importAll">Import Save (JSON)</button>
+        <button class="danger" data-action="resetAll">Reset All Data</button>
+      </div>
+      <p class="muted">All data auto-saves to your browser (localStorage).</p>
+    </div>
+  </section>
+
+</main>
+
+<template id="tpl-island">
+  <div class="parchment island-card">
+    <div class="grid two">
+      <label>Island Name<input data-f="name" /></label>
+      <label>Danger Level
+        <select data-f="danger">
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+        </select>
+      </label>
+      <label>Main Faction<input data-f="faction" /></label>
+      <label>Marine Presence<input data-f="marines" /></label>
+      <label>Pirate Threat<input data-f="pirates" /></label>
+      <label>Local Problem<input data-f="problem" /></label>
+      <label class="full">Important NPCs<textarea data-f="npcs" rows="2"></textarea></label>
+      <label class="full">Devil's Ransom Clue<textarea data-f="ransom" rows="2"></textarea></label>
+      <label class="full">Peaceful Encounter Idea<textarea data-f="peaceful" rows="2"></textarea></label>
+      <label class="full">Dangerous Encounter Idea<textarea data-f="dangerous" rows="2"></textarea></label>
+      <label class="full">Strange Encounter Idea<textarea data-f="strange" rows="2"></textarea></label>
+      <label class="full">Major Consequence Idea<textarea data-f="consequence" rows="2"></textarea></label>
+      <label class="full">Available Rewards<textarea data-f="rewards" rows="2"></textarea></label>
+      <label class="full">Secret Truth<textarea data-f="secret" rows="2"></textarea></label>
+    </div>
+    <div class="btn-row">
+      <button data-act="use">Use as Current Location</button>
+      <button class="danger" data-act="delete">Delete Island</button>
+    </div>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
