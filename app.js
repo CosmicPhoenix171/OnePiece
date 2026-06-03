@@ -3,6 +3,7 @@
    =========================================================== */
 
 const STORAGE_KEY = 'seaTroubleSystem.v1';
+const USERNAME_KEY = 'seaTroubleUser.v1';
 const DEFAULT_MAP_IMAGE = 'assets/oneMap.jpeg';
 
 /* ---------- Default state ---------- */
@@ -53,6 +54,7 @@ const DEFAULT_STATE = {
     crew: [],
     log: []
   },
+  playerSheets: [],
   mapMarkers: [],
   mapImageData: '',
   mapImageName: '',
@@ -97,6 +99,7 @@ function rerenderAll() {
   try { if (typeof refreshStats === 'function') refreshStats(); } catch (e) { console.error(e); }
   try { if (typeof renderIslands === 'function') renderIslands(); } catch (e) { console.error(e); }
   try { if (typeof renderLog === 'function') renderLog(); } catch (e) { console.error(e); }
+  try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
   try { if (typeof renderTravel === 'function') renderTravel(); } catch (e) { console.error(e); }
   try { if (typeof renderShip === 'function') renderShip(); } catch (e) { console.error(e); }
   try { if (typeof renderMap === 'function') renderMap(); } catch (e) { console.error(e); }
@@ -116,6 +119,68 @@ const pick = arr => arr[Math.floor(Math.random()*arr.length)];
 const roll = n => Math.floor(Math.random()*n)+1;
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 const uid = () => Math.random().toString(36).slice(2,10);
+
+let currentUsername = '';
+
+function normalizeUsername(v) {
+  return String(v || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+}
+
+function loadUsername() {
+  try {
+    return normalizeUsername(localStorage.getItem(USERNAME_KEY));
+  } catch {
+    return '';
+  }
+}
+
+function setUsername(name) {
+  currentUsername = normalizeUsername(name);
+  if (currentUsername) localStorage.setItem(USERNAME_KEY, currentUsername);
+  else localStorage.removeItem(USERNAME_KEY);
+  updateLoginUI();
+}
+
+function updateLoginUI() {
+  const label = $('#current-user-label');
+  if (label) label.textContent = `User: ${currentUsername || 'Guest'}`;
+
+  const overlay = $('#login-overlay');
+  if (overlay) overlay.classList.toggle('hidden', Boolean(currentUsername));
+
+  document.body.classList.toggle('app-locked', !currentUsername);
+  if (!currentUsername) {
+    const input = $('#login-name');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
+  }
+}
+
+function requireUsername() {
+  if (currentUsername) return true;
+  updateLoginUI();
+  return false;
+}
+
+function initLogin() {
+  currentUsername = loadUsername();
+  const form = $('#login-form');
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = $('#login-name');
+      const name = normalizeUsername(input ? input.value : '');
+      if (!name) {
+        alert('Please enter a username.');
+        return;
+      }
+      setUsername(name);
+    });
+  }
+  updateLoginUI();
+}
 
 const DANGER_LABELS = { 1:"Safe or familiar area", 2:"Risky area", 3:"Dangerous area", 4:"Deadly area", 5:"Nightmare area" };
 const HEAT_LABELS   = { 0:"Unlisted", 1:"Local notice", 2:"Regional bounty", 3:"Known pirate crew", 4:"Major bounty", 5:"Government priority target" };
@@ -244,6 +309,12 @@ document.addEventListener('click', e => {
     case 'centerShip':     centerOnShip(); break;
     case 'routeFromMap':   if (typeof enterRoutePickMode === 'function') enterRoutePickMode(); break;
     case 'toggleTravelPanel': if (typeof toggleTravelPanel === 'function') toggleTravelPanel(); break;
+    case 'addPlayerSheet': addPlayerSheet(); break;
+    case 'switchUser':
+      if (confirm('Switch username? You can type a new one in the login box.')) {
+        setUsername('');
+      }
+      break;
     case 'exportAll':      exportSave(); break;
     case 'importAll':      importSave(); break;
     case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } break;
@@ -794,6 +865,127 @@ function esc(s) {
 }
 
 /* ===========================================================
+   PLAYER CHARACTER SHEETS
+   =========================================================== */
+function stampSheetEdit(sheet) {
+  sheet.updatedAt = new Date().toISOString();
+  sheet.updatedBy = currentUsername || 'Unknown';
+}
+
+function sheetMetaText(sheet) {
+  const who = sheet.updatedBy || 'Unknown';
+  if (!sheet.updatedAt) return `Last update: not yet edited · by ${esc(who)}`;
+  return `Last update: ${new Date(sheet.updatedAt).toLocaleString()} · by ${esc(who)}`;
+}
+
+function addPlayerSheet() {
+  if (!requireUsername()) return;
+  const sheet = {
+    id: uid(),
+    name: 'New Character',
+    player: currentUsername,
+    role: '',
+    level: 1,
+    bounty: 0,
+    hp: 20,
+    maxHp: 20,
+    devilFruit: '',
+    notes: '',
+    updatedBy: currentUsername,
+    updatedAt: new Date().toISOString()
+  };
+  state.playerSheets.unshift(sheet);
+  save();
+  renderPlayerSheets();
+  showTab('characters');
+}
+
+function renderPlayerSheets() {
+  const root = $('#player-sheet-list');
+  if (!root) return;
+
+  if (!Array.isArray(state.playerSheets)) state.playerSheets = [];
+  if (!state.playerSheets.length) {
+    root.innerHTML = '<p class="muted">No character sheets yet. Click "+ Add Character Sheet" to start.</p>';
+    return;
+  }
+
+  root.innerHTML = state.playerSheets.map((pc, idx) => `
+    <div class="player-card" data-pidx="${idx}">
+      <div class="grid two">
+        <label>Character Name<input type="text" data-pf="name" value="${esc(pc.name)}" /></label>
+        <label>Player Username<input type="text" data-pf="player" value="${esc(pc.player)}" /></label>
+        <label>Crew Role<input type="text" data-pf="role" value="${esc(pc.role)}" placeholder="Captain, Swordsman, Navigator..." /></label>
+        <label>Level<input type="number" data-pf="level" min="1" value="${Number(pc.level) || 1}" /></label>
+        <label>Bounty (berries)<input type="number" data-pf="bounty" min="0" step="100" value="${Math.max(0, Number(pc.bounty) || 0)}" /></label>
+        <label>Devil Fruit<input type="text" data-pf="devilFruit" value="${esc(pc.devilFruit)}" placeholder="e.g. Gomu Gomu no Mi" /></label>
+        <label>HP<input type="number" data-pf="hp" min="0" value="${Math.max(0, Number(pc.hp) || 0)}" /></label>
+        <label>Max HP<input type="number" data-pf="maxHp" min="1" value="${Math.max(1, Number(pc.maxHp) || 1)}" /></label>
+        <label class="full">Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
+      </div>
+      <div class="btn-row">
+        <button type="button" data-pa="hpdelta" data-delta="-1">-1 HP</button>
+        <button type="button" data-pa="hpdelta" data-delta="1">+1 HP</button>
+        <button type="button" data-pa="hpdelta" data-delta="5">+5 HP</button>
+        <button type="button" class="danger" data-pa="delete">Delete Sheet</button>
+      </div>
+      <div class="muted updated-meta">${sheetMetaText(pc)}</div>
+    </div>
+  `).join('');
+
+  $$('.player-card', root).forEach(card => {
+    const idx = Number(card.dataset.pidx);
+    const sheet = state.playerSheets[idx];
+    if (!sheet) return;
+
+    const metaEl = $('.updated-meta', card);
+    const refreshMeta = () => {
+      if (metaEl) metaEl.textContent = sheetMetaText(sheet);
+    };
+
+    $$('[data-pf]', card).forEach(el => {
+      el.addEventListener('input', () => {
+        if (!requireUsername()) return;
+        const key = el.dataset.pf;
+        let value = el.type === 'number' ? (Number(el.value) || 0) : el.value;
+        if (key === 'level') value = Math.max(1, value);
+        if (key === 'bounty') value = Math.max(0, value);
+        if (key === 'maxHp') value = Math.max(1, value);
+        if (key === 'hp') value = Math.max(0, value);
+        sheet[key] = value;
+        if (sheet.hp > sheet.maxHp) sheet.hp = sheet.maxHp;
+        stampSheetEdit(sheet);
+        save();
+        refreshMeta();
+      });
+    });
+
+    $$('[data-pa="hpdelta"]', card).forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!requireUsername()) return;
+        const delta = Number(btn.dataset.delta) || 0;
+        sheet.hp = clamp((Number(sheet.hp) || 0) + delta, 0, Math.max(1, Number(sheet.maxHp) || 1));
+        const hpInput = $('[data-pf="hp"]', card);
+        if (hpInput) hpInput.value = sheet.hp;
+        stampSheetEdit(sheet);
+        save();
+        refreshMeta();
+      });
+    });
+
+    const delBtn = $('[data-pa="delete"]', card);
+    if (delBtn) {
+      delBtn.addEventListener('click', () => {
+        if (!confirm(`Delete ${sheet.name || 'this'} character sheet?`)) return;
+        state.playerSheets.splice(idx, 1);
+        save();
+        renderPlayerSheets();
+      });
+    }
+  });
+}
+
+/* ===========================================================
    SEA TRAVEL — Routes
    =========================================================== */
 const ROUTE_TEMPLATES = [
@@ -1256,9 +1448,11 @@ function addShipLogEntry() {
    =========================================================== */
 bindFields();
 bindShipFields();
+initLogin();
 refreshStats();
 renderIslands();
 renderLog();
+renderPlayerSheets();
 renderTravel();
 renderShip();
 

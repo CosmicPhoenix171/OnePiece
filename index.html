@@ -9,6 +9,10 @@
 <body>
 <header class="topbar">
   <h1>🏴‍☠️ The Devil's Ransom</h1>
+  <div class="userbar">
+    <span id="current-user-label">User: Guest</span>
+    <button type="button" id="switch-user-btn" data-action="switchUser">Switch User</button>
+  </div>
 </header>
 
 <nav class="tabs" id="tabs">
@@ -16,9 +20,23 @@
   <button class="tab" data-tab="islands">Islands</button>
   <button class="tab active" data-tab="map">Map</button>
   <button class="tab" data-tab="ship">Ship Tracker</button>
+  <button class="tab" data-tab="characters">Player Sheets</button>
   <button class="tab" data-tab="log">Captain's Log</button>
   <span class="sync-indicator" id="sync-indicator" title="Realtime sync status"><span class="dot"></span><span id="sync-label">offline</span></span>
 </nav>
+
+<section id="login-overlay" class="login-overlay hidden" aria-live="polite">
+  <div class="login-card">
+    <h2>Join the Crew</h2>
+    <p class="muted">Enter a username to open the campaign tools and edit shared data.</p>
+    <form id="login-form" class="login-form">
+      <label>Username
+        <input id="login-name" type="text" maxlength="30" autocomplete="nickname" placeholder="e.g. Nami" />
+      </label>
+      <button type="submit" class="gold">Log In</button>
+    </form>
+  </div>
+</section>
 
 <main id="main">
   <!-- BOUNTY -->
@@ -374,6 +392,18 @@
         <button data-action="addShipLog">+ Add Entry</button>
       </div>
       <div id="ship-log-list"></div>
+    </div>
+  </section>
+
+  <!-- PLAYER SHEETS -->
+  <section class="panel" id="tab-characters">
+    <div class="parchment">
+      <h2>Player Character Sheets</h2>
+      <p class="muted">Track each player character in one shared place.</p>
+      <div class="btn-row">
+        <button class="gold" data-action="addPlayerSheet">+ Add Character Sheet</button>
+      </div>
+      <div id="player-sheet-list"></div>
     </div>
   </section>
 

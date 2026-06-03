@@ -35,6 +35,18 @@ body {
 }
 .topbar h1 { margin: 0; color: var(--gold-bright); font-size: 2rem; letter-spacing: 1px; text-shadow: 2px 2px 0 #000; }
 .topbar .subtitle { margin: 4px 0 0; color: #c9b78d; font-style: italic; }
+.userbar {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #ecdfc4;
+  font-size: 0.9rem;
+}
+#switch-user-btn {
+  padding: 4px 10px;
+  font-size: 0.82rem;
+}
 
 .tabs {
   display: flex; flex-wrap: wrap; gap: 4px;
@@ -67,6 +79,50 @@ body {
 main { padding: 18px; max-width: 1200px; margin: 0 auto; }
 .panel { display: none; }
 .panel.active { display: block; }
+
+body.app-locked nav.tabs,
+body.app-locked main {
+  filter: blur(2px);
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(2, 8, 12, 0.78), rgba(4, 14, 22, 0.86)),
+    radial-gradient(circle at 50% 15%, rgba(212, 166, 72, 0.28), transparent 46%);
+}
+.login-card {
+  width: min(420px, 100%);
+  background:
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.02) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, var(--parchment) 0%, var(--parchment-dark) 100%);
+  color: var(--ink);
+  border: 2px solid var(--gold-dark);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+.login-card h2 {
+  margin: 0 0 8px;
+  color: #4a2a0a;
+  border-bottom: 1px dashed var(--gold-dark);
+  padding-bottom: 6px;
+}
+.login-form {
+  display: grid;
+  gap: 10px;
+}
+.login-form button {
+  justify-self: start;
+}
 
 .parchment {
   background:
@@ -237,6 +293,19 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 .log-entry textarea { width: 100%; }
 
 .island-card { margin-bottom: 12px; }
+
+.player-card {
+  background: rgba(255,255,255,0.45);
+  border: 1px solid var(--gold-dark);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.player-card .updated-meta {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: #6a5230;
+}
 
 /* ===========================================================
    Sea Travel — DM reference tables + active route

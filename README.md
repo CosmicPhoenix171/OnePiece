@@ -15,7 +15,18 @@ For best results, keep the same browser/profile so the local save stays availabl
 2. **Islands** — Save, edit, and load locations as the current scene.
 3. **Map** — Full-screen world map with click-to-place markers (port, island, danger, treasure, ransom, ship). Drag to reposition, click to edit, with notes per marker. **Sea Travel lives here as a side panel** — create routes manually or by clicking two markers (🧭 Route from 2 Markers). Active routes draw a dashed line between their start and destination markers, and a ship glyph slides along the line as Travel Days progress.
 4. **Ship Tracker** — Hull HP, sails condition, morale, food/water/medicine/cannon shot/berries/repair kits, crew roster with HP & conditions, and a damage/event log.
-5. **Captain's Log** — Saved encounter records with status, notes, and export controls for existing entries.
+5. **Player Sheets** — Shared player character cards with level, bounty, HP, Devil Fruit, and notes.
+6. **Captain's Log** — Saved encounter records with status, notes, and export controls for existing entries.
+
+## Simple login (username only)
+
+The app now asks for a username before editing tools unlock.
+
+1. Enter a username in the login prompt.
+2. The name is saved locally in your browser under `localStorage`.
+3. Use the top-bar **Switch User** button to change to another username.
+
+This is intentionally lightweight and not secure authentication; it is only an in-app identity label.
 
 ## Realtime sync (Firebase)
 
