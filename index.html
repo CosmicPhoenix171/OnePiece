@@ -3,185 +3,53 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sea Trouble System — One Piece DM Tool</title>
+<title>The Devil's Ransom</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <header class="topbar">
-  <h1>🏴‍☠️ Sea Trouble System</h1>
-  <p class="subtitle">A One Piece inspired Dungeon Master's deck</p>
+  <h1>🏴‍☠️ The Devil's Ransom</h1>
 </header>
 
 <nav class="tabs" id="tabs">
-  <button class="tab active" data-tab="dashboard">Dashboard</button>
-  <button class="tab" data-tab="generate">Generate Encounter</button>
-  <button class="tab" data-tab="clock">Encounter Clock</button>
-  <button class="tab" data-tab="heat">Heat Tracker</button>
-  <button class="tab" data-tab="ransom">Devil's Ransom</button>
+  <button class="tab" data-tab="bounty">Bounty</button>
   <button class="tab" data-tab="islands">Islands</button>
-  <button class="tab" data-tab="log">Encounter Log</button>
-  <button class="tab" data-tab="settings">Settings</button>
+  <button class="tab active" data-tab="map">Map</button>
+  <button class="tab" data-tab="ship">Ship Tracker</button>
+  <button class="tab" data-tab="log">Captain's Log</button>
+  <span class="sync-indicator" id="sync-indicator" title="Realtime sync status"><span class="dot"></span><span id="sync-label">offline</span></span>
 </nav>
 
 <main id="main">
-
-  <!-- DASHBOARD -->
-  <section class="panel active" id="tab-dashboard">
+  <!-- BOUNTY -->
+  <section class="panel" id="tab-bounty">
     <div class="parchment">
-      <h2>Campaign Setup</h2>
-      <div class="grid two">
-        <label>Campaign Name<input type="text" data-bind="campaignName" /></label>
-        <label>Current Island / Sea Route<input type="text" data-bind="location" /></label>
-        <label>Danger Level (1–5)
-          <select data-bind="danger">
-            <option value="1">1 — Safe / familiar</option>
-            <option value="2">2 — Risky</option>
-            <option value="3">3 — Dangerous</option>
-            <option value="4">4 — Deadly</option>
-            <option value="5">5 — Nightmare</option>
-          </select>
-        </label>
-        <label>Heat Level (0–5)
-          <select data-bind="heat">
-            <option value="0">0 — Unknown crew</option>
-            <option value="1">1 — Local troublemakers</option>
-            <option value="2">2 — Wanted in one region</option>
-            <option value="3">3 — Known pirate crew</option>
-            <option value="4">4 — Major threat</option>
-            <option value="5">5 — Government priority</option>
-          </select>
-        </label>
-        <label>Devil's Ransom Pieces Held (0–13)<input type="number" min="0" max="13" data-bind="piecesHeld" /></label>
-        <label>Encounter Clock (0–6)<input type="number" min="0" max="6" data-bind="clock" /></label>
-        <label>Party Level<input type="number" min="1" max="20" data-bind="partyLevel" /></label>
-        <label>Party Size<input type="number" min="1" max="10" data-bind="partySize" /></label>
-        <label>Major Faction<input type="text" data-bind="faction" /></label>
-        <label>Marine Presence<input type="text" data-bind="marinePresence" /></label>
-        <label>Rival Pirate Threat<input type="text" data-bind="rivalPirates" /></label>
-        <label>Local Problem<input type="text" data-bind="localProblem" /></label>
-        <label class="full">Current Devil's Ransom Clue<textarea data-bind="ransomClue" rows="2"></textarea></label>
-      </div>
-    </div>
-
-    <div class="grid three quick-stats">
-      <div class="parchment small">
-        <h3>Danger</h3>
-        <div class="big" id="stat-danger">1</div>
-        <div class="muted" id="stat-danger-label">Safe</div>
-      </div>
-      <div class="parchment small">
-        <h3>Heat</h3>
-        <div class="big" id="stat-heat">0</div>
-        <div class="muted" id="stat-heat-label">Unknown</div>
-      </div>
-      <div class="parchment small">
-        <h3>Ransom Pieces</h3>
-        <div class="big" id="stat-pieces">0 / 13</div>
-        <div class="muted">Save DC <span id="stat-dc">10</span></div>
-      </div>
-    </div>
-
-    <div class="parchment">
-      <h2>Quick Actions</h2>
-      <div class="btn-row">
-        <button class="gold" data-action="generate">⚔ Generate Encounter</button>
-        <button class="gold" data-action="ransomTwist">💀 Devil's Ransom Twist</button>
-        <button data-action="genMarine">Marine Patrol</button>
-        <button data-action="genRival">Rival Pirates</button>
-        <button data-action="genSea">Sea Event</button>
-        <button data-action="genIsland">Island Problem</button>
-        <button data-action="genNPC">Generate NPC</button>
-        <button data-action="genReward">Generate Reward</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- GENERATE -->
-  <section class="panel" id="tab-generate">
-    <div class="parchment">
-      <h2>Encounter Generator</h2>
-      <p class="muted">Pulls from campaign state. Higher Danger = more serious. Higher Heat = enemies more prepared. More Ransom pieces = more cursed twists.</p>
-      <div class="btn-row">
-        <button class="gold" data-action="generate">⚔ Generate Encounter</button>
-        <button data-action="genMarine">Force: Marine Patrol</button>
-        <button data-action="genRival">Force: Rival Pirates</button>
-        <button data-action="genSea">Force: Sea Event</button>
-        <button data-action="genIsland">Force: Island Problem</button>
-      </div>
-    </div>
-    <div id="encounter-output"></div>
-  </section>
-
-  <!-- CLOCK -->
-  <section class="panel" id="tab-clock">
-    <div class="parchment">
-      <h2>Encounter Clock</h2>
-      <div class="clock-wrap">
-        <div class="clock-display"><span id="clock-val">0</span> / 6</div>
-        <div class="clock-bar"><div id="clock-fill"></div></div>
-      </div>
-      <div class="btn-row">
-        <button data-clock="1">+1 Long sea travel</button>
-        <button data-clock="1">+1 Searching for Ransom clues</button>
-        <button data-clock="1">+1 Public chaos</button>
-        <button data-clock="1">+1 Obvious powers in public</button>
-        <button data-clock="2">+2 Loud fight</button>
-        <button data-clock="2">+2 Stealing from Marines / nobles / pirates</button>
-        <button data-clock="2">+2 Claimed a Ransom piece</button>
-      </div>
-      <div class="btn-row">
-        <button class="gold" data-action="resetClock">Reset Clock to 0</button>
-        <button data-action="manualMinus">-1 Clock</button>
-      </div>
-      <div id="clock-alert" class="alert hidden">⚠ The Encounter Clock is FULL. An encounter has triggered!</div>
-    </div>
-  </section>
-
-  <!-- HEAT -->
-  <section class="panel" id="tab-heat">
-    <div class="parchment">
-      <h2>Heat Tracker</h2>
+      <h2>Bounty Tracker</h2>
       <div class="clock-wrap">
         <div class="clock-display"><span id="heat-val">0</span> / 5</div>
         <div class="clock-bar heat"><div id="heat-fill"></div></div>
-        <div class="muted" id="heat-label-big">Unknown crew</div>
+        <div class="muted" id="heat-label-big">Unlisted</div>
       </div>
       <div class="btn-row">
         <button data-heat="1">+1 Defeated Marines publicly</button>
         <button data-heat="1">+1 Stole a ship or treasure</button>
         <button data-heat="2">+2 Rescued a prisoner from execution</button>
         <button data-heat="2">+2 Humiliated an important officer</button>
-        <button data-heat="1">+1 Claimed a Ransom piece in public</button>
+        <button data-heat="1">+1 Claimed treasure in public</button>
         <button data-heat="2">+2 Sank a Marine ship</button>
       </div>
       <div class="btn-row">
-        <button class="gold" data-action="heatPlus">+1 Heat</button>
-        <button data-action="heatMinus">-1 Heat (lay low)</button>
+        <button class="gold" data-action="heatPlus">+1 Bounty</button>
+        <button data-action="heatMinus">-1 Bounty (lay low)</button>
       </div>
       <div class="parchment inset">
-        <h3>Heat Effects</h3>
+        <h3>Bounty Effects</h3>
         <ul>
-          <li><b>Heat 3+</b> — Enemies start preparing for the crew.</li>
-          <li><b>Heat 4+</b> — Named bounty hunters and stronger Marine officers appear.</li>
-          <li><b>Heat 5</b> — World Government / major Marine force actively involved.</li>
+          <li><b>Bounty 3+</b> — Enemies start preparing for the crew.</li>
+          <li><b>Bounty 4+</b> — Named bounty hunters and stronger Marine officers appear.</li>
+          <li><b>Bounty 5</b> — World Government / major Marine force actively involved.</li>
         </ul>
       </div>
-    </div>
-  </section>
-
-  <!-- RANSOM -->
-  <section class="panel" id="tab-ransom">
-    <div class="parchment">
-      <h2>Devil's Ransom — 13 Cursed Pieces</h2>
-      <p class="muted">Save DC = 10 + pieces held. Current DC: <b id="ransom-dc">10</b>. Pieces held: <b id="ransom-count">0</b>/13.</p>
-      <div class="btn-row">
-        <button class="gold" data-action="ransomTwist">💀 Generate Curse Pressure</button>
-      </div>
-      <div id="ransom-twist-output"></div>
-    </div>
-    <div class="parchment">
-      <h2>The 13 Pieces</h2>
-      <div id="ransom-list" class="ransom-grid"></div>
     </div>
   </section>
 
@@ -196,24 +64,325 @@
     </div>
   </section>
 
-  <!-- LOG -->
-  <section class="panel" id="tab-log">
-    <div class="parchment">
-      <h2>Saved Encounter Log</h2>
-      <div id="log-list"></div>
+  <!-- SEA TRAVEL panel removed — content lives inside the Map sidebar (#map-travel-panel). -->
+
+  <!-- MAP -->
+  <section class="panel active" id="tab-map">
+    <div class="map-shell">
+      <div class="map-topbar">
+        <div>
+          <h2>🗺 World Map</h2>
+        </div>
+        <div class="map-toolbar btn-row">
+          <label class="inline">Marker Type
+            <select id="map-marker-type" aria-label="Marker type" title="Marker type">
+              <option value="port">⚓ Port</option>
+              <option value="island">🏝 Island</option>
+              <option value="danger">☠ Danger</option>
+              <option value="treasure">💰 Treasure</option>
+              <option value="ransom">💀 Ransom Piece</option>
+              <option value="ship">⛵ Current Ship</option>
+              <option value="marker">📍 Marker</option>
+            </select>
+          </label>
+          <button id="map-zoom-out" title="Zoom out">−</button>
+          <button id="map-zoom-fit">Fit</button>
+          <button id="map-zoom-in" title="Zoom in">+</button>
+          <span id="map-zoom-label">100%</span>
+          <button class="gold" data-action="importMap">Import Game Map</button>
+          <button data-action="centerShip">Center on Ship</button>
+          <button data-action="routeFromMap" id="route-from-map-btn">🧭 Route from 2 Markers</button>
+          <button data-action="toggleTravelPanel" id="toggle-travel-panel-btn">⛵ Sea Travel</button>
+          <button data-action="clearMap" class="danger">Clear Markers</button>
+        </div>
+      </div>
+      <input type="file" id="map-file-input" accept="image/*" class="hidden" aria-label="Import game map image" title="Import game map image" />
+      <div id="route-pick-status" class="route-pick-status hidden">
+        <span id="route-pick-text"></span>
+        <button type="button" id="route-pick-cancel" class="danger">Cancel</button>
+      </div>
+      <div class="map-body">
+        <div id="map-wrap">
+          <div id="map-viewport">
+            <div id="map-canvas">
+              <img class="map-image map-tile" data-copy="0" alt="Imported One Piece game map" draggable="false" />
+              <img class="map-image map-tile" data-copy="1" alt="Imported One Piece game map" draggable="false" />
+              <img class="map-image map-tile" data-copy="2" alt="Imported One Piece game map" draggable="false" />
+              <div id="map-empty-state">Add a repo-backed map image or import one to start using the game map.</div>
+              <svg id="map-svg" viewBox="0 0 3000 600" preserveAspectRatio="none">
+                <g id="map-svg-routes"></g>
+                <g id="map-svg-markers"></g>
+                <g id="map-svg-ship"></g>
+              </svg>
+            </div>
+          </div>
+          <div id="map-editor"></div>
+        </div>
+        <aside id="map-travel-panel" class="map-travel-panel">
+          <div class="travel-panel-head">
+            <h3>⛵ Sea Travel</h3>
+            <button class="travel-panel-close" data-action="toggleTravelPanel" aria-label="Close Sea Travel panel" title="Close Sea Travel panel">×</button>
+          </div>
+          <div class="travel-panel-body">
+            <section class="travel-block">
+              <h4>Active Route</h4>
+              <div id="travel-active"></div>
+              <div class="btn-row">
+                <button class="gold" data-action="newRoute">+ New Sea Route</button>
+                <button data-action="loadRouteTemplate">Load Template…</button>
+              </div>
+            </section>
+
+            <section class="travel-block hidden" id="travel-new-form">
+              <h4>New Sea Route</h4>
+              <div class="grid two">
+                <label>Start<input type="text" id="nr-start" placeholder="e.g. Loguetown" /></label>
+                <label>Destination<input type="text" id="nr-dest" placeholder="e.g. Reverse Mountain" /></label>
+                <label>Travel Days<input type="number" id="nr-days" min="1" max="60" value="5" /></label>
+                <label>Roll DC
+                  <select id="nr-dc">
+                    <option value="10">10 — Calm coastal</option>
+                    <option value="12" selected>12 — Open sea</option>
+                    <option value="14">14 — Rough sea</option>
+                    <option value="15">15 — Grand Line entry</option>
+                    <option value="17">17 — Storm sea / Calm Belt edge</option>
+                  </select>
+                </label>
+                <label>Danger Modifier<input type="number" id="nr-danger" min="0" max="10" value="0" /></label>
+                <label>Complication Limit<input type="number" id="nr-complim" min="1" max="10" value="3" /></label>
+                <label class="full">Crew Roles Rolling
+                  <div class="role-checks" id="nr-roles">
+                    <label class="role-check"><input type="checkbox" name="nr-role" value="Captain" checked /> Captain</label>
+                    <label class="role-check"><input type="checkbox" name="nr-role" value="Helmsmen" /> Helmsmen</label>
+                    <label class="role-check"><input type="checkbox" name="nr-role" value="Navigator" checked /> Navigator</label>
+                    <label class="role-check"><input type="checkbox" name="nr-role" value="Cook" /> Cook</label>
+                    <label class="role-check"><input type="checkbox" name="nr-role" value="Morale" /> Morale</label>
+                    <label class="role-check"><input type="checkbox" name="nr-role" value="Doctor" /> Doctor</label>
+                    <label class="role-check"><input type="checkbox" name="nr-role" value="Shipwright" /> Shipwright</label>
+                  </div>
+                </label>
+              </div>
+              <div id="nr-marker-status" class="muted nr-marker-status"></div>
+              <div class="btn-row">
+                <button class="gold" data-action="createRoute">Create Route</button>
+                <button data-action="cancelNewRoute">Cancel</button>
+              </div>
+            </section>
+
+            <details class="travel-block">
+              <summary>Route History</summary>
+              <div id="travel-history"></div>
+            </details>
+
+            <details class="travel-block">
+              <summary>📜 DM Reference — Sea Travel</summary>
+              <div class="travel-ref">
+                <h5>Distance Chart</h5>
+                <table class="ref">
+                  <thead><tr><th>Route Type</th><th>Days</th><th>DC</th></tr></thead>
+                  <tbody>
+                    <tr><td>Short coastal hop</td><td>1–2</td><td>10</td></tr>
+                    <tr><td>Inter-island, calm sea</td><td>3–5</td><td>12</td></tr>
+                    <tr><td>Open ocean crossing</td><td>5–8</td><td>14</td></tr>
+                    <tr><td>Grand Line leg</td><td>7–14</td><td>15</td></tr>
+                    <tr><td>Storm sea / Calm Belt edge</td><td>10–20</td><td>17</td></tr>
+                  </tbody>
+                </table>
+                <h5>Danger Modifier</h5>
+                <table class="ref">
+                  <thead><tr><th>Danger</th><th>Mod</th></tr></thead>
+                  <tbody>
+                    <tr><td>1 — Safe / familiar</td><td>+0</td></tr>
+                    <tr><td>2 — Risky</td><td>+1</td></tr>
+                    <tr><td>3 — Dangerous</td><td>+2</td></tr>
+                    <tr><td>4 — Deadly</td><td>+3</td></tr>
+                    <tr><td>5 — Nightmare</td><td>+5</td></tr>
+                  </tbody>
+                </table>
+                <p class="muted">Target = Travel Days + Danger Modifier. Default Complication Limit = 3.</p>
+                <h5>Progress Rules</h5>
+                <ul class="ref">
+                  <li>Nat 20 — +3 progress</li>
+                  <li>Beat DC by 5+ — +2 progress</li>
+                  <li>Meet / beat DC — +1 progress</li>
+                  <li>Fail by 1–4 — 0 progress</li>
+                  <li>Fail by 5+ — +1 complication</li>
+                  <li>Nat 1 — +1 complication + setback</li>
+                </ul>
+                <h5>Complications (d12)</h5>
+                <ol class="ref">
+                  <li>Storm front — 1d6 hull, lose 1 day.</li>
+                  <li>Off course — next roll disadvantage.</li>
+                  <li>Sea King sighting — Lookout DC+2.</li>
+                  <li>Sickness aboard — –1 to crew rolls.</li>
+                  <li>Supplies spoiled — –1 food &amp; water.</li>
+                  <li>Rigging fails — Shipwright DC or sails damage.</li>
+                  <li>Marine patrol on horizon.</li>
+                  <li>Rival pirate shadow.</li>
+                  <li>Mutiny whisper — –1 Morale.</li>
+                  <li>Cursed fog — Ransom Twist.</li>
+                  <li>Drifting wreck / castaway.</li>
+                  <li>Whirlpool / reef — DEX save.</li>
+                </ol>
+                <h5>Sailing Event (d10)</h5>
+                <ol class="ref">
+                  <li>Dead calm — first roll disadvantage.</li>
+                  <li>Following wind — +1 progress on first success.</li>
+                  <li>Strange tide — Navigator save or lose a day.</li>
+                  <li>Music on the water — Morale +1.</li>
+                  <li>Sea bird omen — foreshadow.</li>
+                  <li>Bottle in the waves — clue.</li>
+                  <li>Drifting cargo — +1 supply.</li>
+                  <li>Whale pod — peaceful.</li>
+                  <li>Storm building — +1 DC today.</li>
+                  <li>Ransom resonance.</li>
+                </ol>
+                <h5>Devil's Ransom During Travel</h5>
+                <ul class="ref">
+                  <li><b>1–3 pieces:</b> 1 cursed sea event per voyage.</li>
+                  <li><b>4–6 pieces:</b> +1 Complication Limit, 1 forced Twist.</li>
+                  <li><b>7–9 pieces:</b> Roll DC +1, named threat tracks ship.</li>
+                  <li><b>10–12 pieces:</b> Daily Ransom Twist.</li>
+                  <li><b>13 pieces:</b> Puzzle Key awakens — travel non-linear.</li>
+                </ul>
+              </div>
+            </details>
+          </div>
+        </aside>
+      </div>
     </div>
   </section>
 
-  <!-- SETTINGS -->
-  <section class="panel" id="tab-settings">
+  <!-- SHIP TRACKER -->
+  <section class="panel" id="tab-ship">
     <div class="parchment">
-      <h2>Settings</h2>
-      <div class="btn-row">
-        <button data-action="exportAll">Export Save (JSON)</button>
-        <button data-action="importAll">Import Save (JSON)</button>
-        <button class="danger" data-action="resetAll">Reset All Data</button>
+      <h2>⛵ Ship Tracker</h2>
+      <div class="grid two">
+        <label>Ship Name<input type="text" data-ship="name" /></label>
+        <label>Ship Class
+          <select data-ship="class">
+            <option>Dinghy</option>
+            <option>Sloop</option>
+            <option>Caravel</option>
+            <option>Galleon</option>
+            <option>Man-o'-War</option>
+            <option>Unique / Story Ship</option>
+          </select>
+        </label>
+        <label>Captain<input type="text" data-ship="captain" /></label>
+        <label>Flag Description<input type="text" data-ship="flag" /></label>
       </div>
-      <p class="muted">All data auto-saves to your browser (localStorage).</p>
+
+      <h3>Hull &amp; Sails</h3>
+      <div class="grid two">
+        <div class="ship-meter">
+          <div class="meter-label">Hull HP</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"hull","d":-5}'>-5</button>
+            <button data-shipdelta='{"k":"hull","d":-1}'>-1</button>
+            <span class="meter-val"><span id="ship-hull">0</span> / <input type="number" data-ship="hullMax" min="1" aria-label="Maximum hull HP" title="Maximum hull HP" /></span>
+            <button data-shipdelta='{"k":"hull","d":1}'>+1</button>
+            <button data-shipdelta='{"k":"hull","d":5}'>+5</button>
+          </div>
+          <div class="clock-bar"><div id="hull-fill"></div></div>
+        </div>
+        <div class="ship-meter">
+          <div class="meter-label">Sails Condition (%)</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"sails","d":-10}'>-10</button>
+            <button data-shipdelta='{"k":"sails","d":-5}'>-5</button>
+            <span class="meter-val"><span id="ship-sails">100</span> %</span>
+            <button data-shipdelta='{"k":"sails","d":5}'>+5</button>
+            <button data-shipdelta='{"k":"sails","d":10}'>+10</button>
+          </div>
+          <div class="clock-bar"><div id="sails-fill"></div></div>
+        </div>
+        <div class="ship-meter">
+          <div class="meter-label">Morale (1–10)</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"morale","d":-1}'>-1</button>
+            <span class="meter-val"><span id="ship-morale">5</span> / 10</span>
+            <button data-shipdelta='{"k":"morale","d":1}'>+1</button>
+          </div>
+          <div class="clock-bar"><div id="morale-fill"></div></div>
+        </div>
+      </div>
+
+      <h3>Supplies</h3>
+      <div class="grid three">
+        <div class="supply">
+          <div class="meter-label">🍞 Food</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"food","d":-1}'>-1</button>
+            <span class="meter-val"><span id="ship-food">0</span></span>
+            <button data-shipdelta='{"k":"food","d":1}'>+1</button>
+            <button data-shipdelta='{"k":"food","d":5}'>+5</button>
+          </div>
+        </div>
+        <div class="supply">
+          <div class="meter-label">💧 Water</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"water","d":-1}'>-1</button>
+            <span class="meter-val"><span id="ship-water">0</span></span>
+            <button data-shipdelta='{"k":"water","d":1}'>+1</button>
+            <button data-shipdelta='{"k":"water","d":5}'>+5</button>
+          </div>
+        </div>
+        <div class="supply">
+          <div class="meter-label">💊 Medicine</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"medicine","d":-1}'>-1</button>
+            <span class="meter-val"><span id="ship-medicine">0</span></span>
+            <button data-shipdelta='{"k":"medicine","d":1}'>+1</button>
+          </div>
+        </div>
+        <div class="supply">
+          <div class="meter-label">💣 Cannon Shot</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"ammo","d":-1}'>-1</button>
+            <span class="meter-val"><span id="ship-ammo">0</span></span>
+            <button data-shipdelta='{"k":"ammo","d":1}'>+1</button>
+            <button data-shipdelta='{"k":"ammo","d":5}'>+5</button>
+          </div>
+        </div>
+        <div class="supply">
+          <div class="meter-label">💰 Berries</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"berries","d":-100}'>-100</button>
+            <span class="meter-val"><span id="ship-berries">0</span></span>
+            <button data-shipdelta='{"k":"berries","d":100}'>+100</button>
+            <button data-shipdelta='{"k":"berries","d":1000}'>+1k</button>
+          </div>
+        </div>
+        <div class="supply">
+          <div class="meter-label">🧰 Repair Kits</div>
+          <div class="meter-row">
+            <button data-shipdelta='{"k":"repair","d":-1}'>-1</button>
+            <span class="meter-val"><span id="ship-repair">0</span></span>
+            <button data-shipdelta='{"k":"repair","d":1}'>+1</button>
+          </div>
+        </div>
+      </div>
+
+      <h3>Crew Roster</h3>
+      <div id="crew-list"></div>
+      <div class="btn-row"><button class="gold" data-action="addCrew">+ Add Crew Member</button></div>
+
+      <h3>Damage / Event Log</h3>
+      <div class="btn-row">
+        <input type="text" id="ship-log-input" class="grow" placeholder="e.g. Took 8 hull from storm" />
+        <button data-action="addShipLog">+ Add Entry</button>
+      </div>
+      <div id="ship-log-list"></div>
+    </div>
+  </section>
+
+  <!-- LOG -->
+  <section class="panel" id="tab-log">
+    <div class="parchment">
+      <h2>Captain's Log</h2>
+      <div id="log-preview"></div>
+      <div id="log-list"></div>
     </div>
   </section>
 
@@ -248,6 +417,12 @@
   </div>
 </template>
 
+<!-- Firebase Realtime Database (compat SDK). Edit firebase-config.js to enable shared sessions. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
+<script src="map.js"></script>
+<script src="sync.js"></script>
 </body>
 </html>

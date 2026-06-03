@@ -3,6 +3,7 @@
    =========================================================== */
 
 const STORAGE_KEY = 'seaTroubleSystem.v1';
+const DEFAULT_MAP_IMAGE = 'assets/oneMap.jpeg';
 
 /* ---------- Default state ---------- */
 const DEFAULT_RANSOM = [
@@ -38,6 +39,24 @@ const DEFAULT_STATE = {
   ransom: DEFAULT_RANSOM.map(p => ({ ...p, holder: "", claimed: false, clueLoc: "", rumors: "" })),
   islands: [],
   log: [],
+  routes: [],
+  activeRouteId: null,
+  ship: {
+    name: "The Salt Promise",
+    class: "Caravel",
+    captain: "",
+    flag: "Black flag, gold sun broken by a sword",
+    hull: 40, hullMax: 40,
+    sails: 100,
+    morale: 6,
+    food: 20, water: 20, medicine: 4, ammo: 15, berries: 500, repair: 2,
+    crew: [],
+    log: []
+  },
+  mapMarkers: [],
+  mapImageData: '',
+  mapImageName: '',
+  mapView: { zoom: 1, panX: 0, panY: 0 }
 };
 
 let state = load();
@@ -54,7 +73,41 @@ function load() {
     return structuredClone(DEFAULT_STATE);
   }
 }
-function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (!__applyingRemote && typeof window.syncPush === 'function') {
+    try { window.syncPush(state); } catch (e) { console.error('syncPush failed', e); }
+  }
+}
+
+let __applyingRemote = false;
+function applyRemoteState(remote) {
+  if (!remote || typeof remote !== 'object') return;
+  __applyingRemote = true;
+  try {
+    Object.keys(state).forEach((k) => { delete state[k]; });
+    Object.assign(state, structuredClone(DEFAULT_STATE), remote);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    rerenderAll();
+  } finally {
+    __applyingRemote = false;
+  }
+}
+function rerenderAll() {
+  try { if (typeof refreshStats === 'function') refreshStats(); } catch (e) { console.error(e); }
+  try { if (typeof renderIslands === 'function') renderIslands(); } catch (e) { console.error(e); }
+  try { if (typeof renderLog === 'function') renderLog(); } catch (e) { console.error(e); }
+  try { if (typeof renderTravel === 'function') renderTravel(); } catch (e) { console.error(e); }
+  try { if (typeof renderShip === 'function') renderShip(); } catch (e) { console.error(e); }
+  try { if (typeof renderMap === 'function') renderMap(); } catch (e) { console.error(e); }
+  $$('[data-bind]').forEach((el) => {
+    const key = el.dataset.bind;
+    if (state[key] !== undefined && document.activeElement !== el) el.value = state[key];
+  });
+}
+window.applyRemoteState = applyRemoteState;
+window.rerenderAll = rerenderAll;
+window.__getState = () => state;
 
 /* ---------- Utility ---------- */
 const $  = (s, r=document) => r.querySelector(s);
@@ -65,7 +118,7 @@ const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 const uid = () => Math.random().toString(36).slice(2,10);
 
 const DANGER_LABELS = { 1:"Safe or familiar area", 2:"Risky area", 3:"Dangerous area", 4:"Deadly area", 5:"Nightmare area" };
-const HEAT_LABELS   = { 0:"Unknown crew", 1:"Local troublemakers", 2:"Wanted in one region", 3:"Known pirate crew", 4:"Major threat", 5:"Government priority target" };
+const HEAT_LABELS   = { 0:"Unlisted", 1:"Local notice", 2:"Regional bounty", 3:"Known pirate crew", 4:"Major bounty", 5:"Government priority target" };
 
 /* ===========================================================
    Tab navigation
@@ -102,17 +155,26 @@ function bindFields() {
    Refresh top-level stat displays
    =========================================================== */
 function refreshStats() {
-  $('#stat-danger').textContent = state.danger;
-  $('#stat-danger-label').textContent = DANGER_LABELS[state.danger];
-  $('#stat-heat').textContent = state.heat;
-  $('#stat-heat-label').textContent = HEAT_LABELS[state.heat];
-  $('#stat-pieces').textContent = `${state.piecesHeld} / 13`;
-  $('#stat-dc').textContent = 10 + Number(state.piecesHeld);
+  const statDanger = $('#stat-danger');
+  const statDangerLabel = $('#stat-danger-label');
+  const statHeat = $('#stat-heat');
+  const statHeatLabel = $('#stat-heat-label');
+  const statPieces = $('#stat-pieces');
+  const statDc = $('#stat-dc');
+  if (statDanger) statDanger.textContent = state.danger;
+  if (statDangerLabel) statDangerLabel.textContent = DANGER_LABELS[state.danger];
+  if (statHeat) statHeat.textContent = state.heat;
+  if (statHeatLabel) statHeatLabel.textContent = HEAT_LABELS[state.heat];
+  if (statPieces) statPieces.textContent = `${state.piecesHeld} / 13`;
+  if (statDc) statDc.textContent = 10 + Number(state.piecesHeld);
 
   // Clock
-  $('#clock-val').textContent = state.clock;
-  $('#clock-fill').style.width = (state.clock/6*100) + '%';
-  $('#clock-alert').classList.toggle('hidden', state.clock < 6);
+  const clockVal = $('#clock-val');
+  const clockFill = $('#clock-fill');
+  const clockAlert = $('#clock-alert');
+  if (clockVal) clockVal.textContent = state.clock;
+  if (clockFill) clockFill.style.width = (state.clock/6*100) + '%';
+  if (clockAlert) clockAlert.classList.toggle('hidden', state.clock < 6);
 
   // Heat tab
   $('#heat-val').textContent = state.heat;
@@ -120,8 +182,10 @@ function refreshStats() {
   $('#heat-label-big').textContent = HEAT_LABELS[state.heat];
 
   // Ransom
-  $('#ransom-dc').textContent = 10 + Number(state.piecesHeld);
-  $('#ransom-count').textContent = state.piecesHeld;
+  const ransomDc = $('#ransom-dc');
+  const ransomCount = $('#ransom-count');
+  if (ransomDc) ransomDc.textContent = 10 + Number(state.piecesHeld);
+  if (ransomCount) ransomCount.textContent = state.piecesHeld;
 }
 
 /* ===========================================================
@@ -168,6 +232,18 @@ document.addEventListener('click', e => {
     case 'heatPlus':       state.heat = clamp(state.heat+1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
     case 'heatMinus':      state.heat = clamp(state.heat-1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
     case 'newIsland':      addIsland(); break;
+    case 'newRoute':       showNewRouteForm(true); break;
+    case 'cancelNewRoute': showNewRouteForm(false); break;
+    case 'createRoute':    createRouteFromForm(); break;
+    case 'loadRouteTemplate': loadRouteTemplate(); break;
+    case 'addCrew':        addCrewMember(); break;
+    case 'addShipLog':     addShipLogEntry(); break;
+    case 'importMap':      importMapImage(); break;
+    case 'resetMapImage':  if (confirm('Remove the current map image?')) { state.mapImageData = ''; state.mapImageName = ''; save(); renderMap(); } break;
+    case 'clearMap':       if (confirm('Remove all map markers?')) { state.mapMarkers = []; save(); renderMap(); } break;
+    case 'centerShip':     centerOnShip(); break;
+    case 'routeFromMap':   if (typeof enterRoutePickMode === 'function') enterRoutePickMode(); break;
+    case 'toggleTravelPanel': if (typeof toggleTravelPanel === 'function') toggleTravelPanel(); break;
     case 'exportAll':      exportSave(); break;
     case 'importAll':      importSave(); break;
     case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } break;
@@ -179,6 +255,20 @@ function flashTab(name) {
   if (!t) return;
   t.style.boxShadow = '0 0 0 3px #f5c75a';
   setTimeout(()=> t.style.boxShadow = '', 1500);
+}
+
+function showTab(name) {
+  const tab = $(`#tabs .tab[data-tab="${name}"]`);
+  const panel = $(`#tab-${name}`);
+  if (!tab || !panel) return;
+  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
+  $$('.panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  panel.classList.add('active');
+}
+
+function encounterOutputTarget() {
+  return $('#encounter-output') || $('#log-preview');
 }
 
 /* ===========================================================
@@ -356,7 +446,9 @@ function generateRansomTwist(asPanel) {
     text: `${saveType} save DC ${dc} vs ${reason}. On failure: ${pressure}`
   };
   if (asPanel) {
-    $('#ransom-twist-output').innerHTML = `
+    const output = $('#ransom-twist-output') || encounterOutputTarget();
+    if (!output) return twist;
+    output.innerHTML = `
       <div class="encounter-card">
         <h2>💀 Devil's Ransom Curse Pressure</h2>
         <div class="row"><b>${saveType} Save DC ${dc}</b> — vs ${reason}</div>
@@ -437,11 +529,7 @@ function generateEncounter(forcedType) {
   state.log.unshift(enc);
   save();
   renderLog();
-  // Switch view
-  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
-  $$('.panel').forEach(p => p.classList.remove('active'));
-  $('#tabs .tab[data-tab="generate"]').classList.add('active');
-  $('#tab-generate').classList.add('active');
+  showTab('log');
 }
 
 function renderEncounter(enc) {
@@ -473,19 +561,20 @@ function renderEncounter(enc) {
         <button onclick="resetClockAfter()">Reset Clock to 0</button>
       </div>
     </div>`;
-  $('#encounter-output').innerHTML = html;
+  const output = encounterOutputTarget();
+  if (!output) return;
+  output.innerHTML = html;
 }
 
 function showQuickCard(title, body) {
-  $('#encounter-output').innerHTML = `
+  const output = encounterOutputTarget();
+  if (!output) return;
+  output.innerHTML = `
     <div class="encounter-card">
       <h2>${title}</h2>
       <div class="row">${esc(body)}</div>
     </div>`;
-  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
-  $$('.panel').forEach(p => p.classList.remove('active'));
-  $('#tabs .tab[data-tab="generate"]').classList.add('active');
-  $('#tab-generate').classList.add('active');
+  showTab('log');
 }
 
 function rerollEncounter() { generateEncounter(); }
@@ -684,7 +773,10 @@ function renderLog() {
 
 window.reshowEncounter = function(id) {
   const enc = state.log.find(e => e.id === id);
-  if (enc) { renderEncounter(enc); $$('#tabs .tab').forEach(x=>x.classList.remove('active')); $$('.panel').forEach(p=>p.classList.remove('active')); $('#tabs .tab[data-tab="generate"]').classList.add('active'); $('#tab-generate').classList.add('active'); }
+  if (enc) {
+    renderEncounter(enc);
+    showTab('log');
+  }
 };
 window.deleteEncounter = function(id) {
   if (!confirm('Delete this log entry?')) return;
@@ -702,10 +794,471 @@ function esc(s) {
 }
 
 /* ===========================================================
+   SEA TRAVEL — Routes
+   =========================================================== */
+const ROUTE_TEMPLATES = [
+  { label: "Coastal hop (East Blue)",       days: 2,  dc: 10, danger: 0 },
+  { label: "Inter-island, calm sea",        days: 4,  dc: 12, danger: 1 },
+  { label: "Open ocean crossing",           days: 6,  dc: 14, danger: 2 },
+  { label: "Grand Line leg (Log Pose)",     days: 10, dc: 15, danger: 3 },
+  { label: "Storm sea / cursed water",      days: 14, dc: 17, danger: 5 },
+];
+
+const COMPLICATION_TABLE = [
+  "Storm front — ship takes 1d6 hull, lose 1 day of progress.",
+  "Off course — next roll at disadvantage.",
+  "Sea King sighting — Lookout DC+2 or take a wound, lose 1 progress.",
+  "Sickness aboard — Cook/Doctor save or –1 to crew rolls until treated.",
+  "Supplies spoiled — lose 1 food and 1 water.",
+  "Rigging fails — Shipwright DC or lose 10% Sails condition.",
+  "Marine patrol on horizon — sneak, run, or fight.",
+  "Rival pirate shadow — they want what you carry.",
+  "Mutiny whisper — Captain Charisma check or –1 Morale.",
+  "Cursed fog — Devil's Ransom resonance, force a Ransom Twist.",
+  "Drifting wreck / castaway — reveal hook, costs a day.",
+  "Whirlpool / reef — DEX vehicle check; hull damage on fail."
+];
+
+const SAILING_EVENTS = [
+  "Dead calm — no wind; first roll today at disadvantage.",
+  "Following wind — first success today counts +1 extra progress.",
+  "Strange tide — Navigator Wisdom save or lose a day.",
+  "Music on the water — distant ship sings; Morale +1.",
+  "Sea bird omen — DM picks next complication (foreshadow).",
+  "Bottle in the waves — clue, map fragment, or distress note.",
+  "Drifting cargo — 1 supply of food/water/medicine recovered.",
+  "Whale pod — peaceful unless attacked.",
+  "Storm building — every roll today at +1 DC.",
+  "Devil's Ransom resonance — pieces glow; trigger Ransom Twist."
+];
+
+const SETBACKS = [
+  "lose 1 food",
+  "lose 1 water",
+  "−5 hull",
+  "−10% sails",
+  "−1 Morale",
+  "1 crew member injured",
+];
+
+function showNewRouteForm(show) {
+  $('#travel-new-form').classList.toggle('hidden', !show);
+}
+
+function loadRouteTemplate() {
+  const lines = ROUTE_TEMPLATES.map((t,i) => `${i+1}. ${t.label} — ${t.days} days, DC ${t.dc}, +${t.danger} danger`).join('\n');
+  const pickStr = prompt(`Pick a template (1-${ROUTE_TEMPLATES.length}):\n\n${lines}`);
+  const idx = Number(pickStr) - 1;
+  const t = ROUTE_TEMPLATES[idx];
+  if (!t) return;
+  showNewRouteForm(true);
+  $('#nr-days').value = t.days;
+  $('#nr-dc').value = t.dc;
+  $('#nr-danger').value = t.danger;
+}
+
+function createRouteFromForm() {
+  const start = $('#nr-start').value.trim() || 'Unknown Port';
+  const dest  = $('#nr-dest').value.trim()  || 'Unknown Destination';
+  const days  = Math.max(1, Number($('#nr-days').value) || 1);
+  const dc    = Number($('#nr-dc').value) || 12;
+  const dangerMod = Math.max(0, Number($('#nr-danger').value) || 0);
+  const compLim = Math.max(1, Number($('#nr-complim').value) || 3);
+  const target = days + dangerMod;
+  const roles = $$('input[name="nr-role"]:checked').map(el => el.value);
+  const form = $('#travel-new-form');
+  const startMarkerId = form?.dataset.startMarkerId || null;
+  const destMarkerId  = form?.dataset.destMarkerId  || null;
+  const route = {
+    id: uid(),
+    createdAt: new Date().toISOString(),
+    start, dest, days, dc, dangerMod, target, compLim, roles,
+    progress: 0, complications: 0, currentDay: 1,
+    status: 'active', // 'active' | 'won' | 'lost'
+    startMarkerId, destMarkerId,
+    log: []
+  };
+  state.routes.unshift(route);
+  state.activeRouteId = route.id;
+  save();
+  showNewRouteForm(false);
+  ['nr-start','nr-dest'].forEach(id => { const el = $('#'+id); if (el) el.value = ''; });
+  if (form) {
+    delete form.dataset.startMarkerId;
+    delete form.dataset.destMarkerId;
+  }
+  const status = $('#nr-marker-status');
+  if (status) status.textContent = '';
+  renderTravel();
+  if (typeof renderMap === 'function') renderMap();
+}
+
+function activeRoute() {
+  return state.routes.find(r => r.id === state.activeRouteId) || null;
+}
+
+function applyRoll(roleIdx, rollVal) {
+  const r = activeRoute();
+  if (!r || r.status !== 'active') return;
+  const role = r.roles[roleIdx] || 'Crew';
+  const dc = r.dc;
+  let progress = 0, complication = 0, setback = null;
+  let resultText = '';
+  if (rollVal === 20) { progress = 3; resultText = 'Nat 20 — +3 progress'; }
+  else if (rollVal === 1) {
+    complication = 1;
+    setback = pick(SETBACKS);
+    resultText = `Nat 1 — +1 complication + setback (${setback})`;
+  }
+  else if (rollVal >= dc + 5) { progress = 2; resultText = `Beat DC by 5+ — +2 progress`; }
+  else if (rollVal >= dc)     { progress = 1; resultText = `Met DC — +1 progress`; }
+  else if (rollVal >= dc - 4) { progress = 0; resultText = `Failed by 1–4 — 0 progress`; }
+  else                        { complication = 1; resultText = `Failed by 5+ — +1 complication`; }
+
+  r.progress += progress;
+  r.complications += complication;
+  r.log.push({
+    day: r.currentDay,
+    role, roll: rollVal, dc,
+    progress, complication, setback,
+    text: resultText,
+    when: new Date().toISOString()
+  });
+
+  // Win/Lose check
+  if (r.progress >= r.target) r.status = 'won';
+  else if (r.complications >= r.compLim) r.status = 'lost';
+
+  save();
+  renderTravel();
+}
+
+function nextTravelDay() {
+  const r = activeRoute();
+  if (!r || r.status !== 'active') return;
+  r.currentDay += 1;
+  // Daily food/water consumption based on crew count (min 1)
+  const crewCount = Math.max(1, state.ship.crew.length || state.partySize || 4);
+  state.ship.food = Math.max(0, state.ship.food - crewCount);
+  state.ship.water = Math.max(0, state.ship.water - crewCount);
+  r.log.push({
+    day: r.currentDay - 1,
+    role: '— end of day —',
+    text: `Day ${r.currentDay - 1} ends. Consumed ${crewCount} food and ${crewCount} water.`,
+    when: new Date().toISOString(),
+    isMeta: true
+  });
+  save();
+  renderTravel();
+  renderShip();
+}
+
+function rollSailingEvent() {
+  const r = activeRoute();
+  if (!r) return;
+  const idx = roll(10) - 1;
+  const ev = SAILING_EVENTS[idx];
+  r.log.push({
+    day: r.currentDay,
+    role: '⛵ Sailing Event',
+    text: `(d10 = ${idx+1}) ${ev}`,
+    when: new Date().toISOString(),
+    isMeta: true
+  });
+  save(); renderTravel();
+}
+
+function rollComplicationDetail() {
+  const r = activeRoute();
+  if (!r) return;
+  const idx = roll(12) - 1;
+  const c = COMPLICATION_TABLE[idx];
+  r.log.push({
+    day: r.currentDay,
+    role: '⚠ Complication Detail',
+    text: `(d12 = ${idx+1}) ${c}`,
+    when: new Date().toISOString(),
+    isMeta: true
+  });
+  save(); renderTravel();
+}
+
+function endRoute(force) {
+  const r = activeRoute();
+  if (!r) return;
+  if (r.status === 'active' && !confirm('End this route now? It will be marked as Aborted.')) return;
+  if (r.status === 'active') r.status = force || 'aborted';
+  state.activeRouteId = null;
+  save(); renderTravel();
+}
+
+function resumeRoute(id) {
+  state.activeRouteId = id;
+  const r = state.routes.find(x => x.id === id);
+  if (r && r.status !== 'active') r.status = 'active';
+  save(); renderTravel();
+}
+
+function deleteRoute(id) {
+  if (!confirm('Delete this route entirely?')) return;
+  state.routes = state.routes.filter(r => r.id !== id);
+  if (state.activeRouteId === id) state.activeRouteId = null;
+  save(); renderTravel();
+}
+
+function renderTravel() {
+  if (typeof renderMapRoute === 'function') renderMapRoute();
+  // Active route
+  const root = $('#travel-active');
+  const r = activeRoute();
+  if (!r) {
+    root.innerHTML = '<p class="muted">No active sea route. Create one to begin tracking.</p>';
+  } else {
+    const progPct = Math.min(100, (r.progress / r.target) * 100);
+    const compPct = Math.min(100, (r.complications / r.compLim) * 100);
+    const statusBanner = r.status === 'won'
+      ? '<div class="route-status win">🏁 SUCCESS — Reached destination!</div>'
+      : r.status === 'lost'
+      ? '<div class="route-status lose">☠ FAILURE — Complication limit hit. The route becomes a story event.</div>'
+      : '<div class="route-status active">⛵ Voyage in progress…</div>';
+    const roleOpts = r.roles.map((rl,i) => `<option value="${i}">${esc(rl)}</option>`).join('');
+    root.innerHTML = `
+      <div class="route-card">
+        <h3>${esc(r.start)} → ${esc(r.dest)}</h3>
+        ${statusBanner}
+        <div class="pair">
+          <div><span>Day:</span> <b>${r.currentDay} / ${r.days}</b></div>
+          <div><span>Roll DC:</span> <b>${r.dc}</b></div>
+          <div><span>Target:</span> <b>${r.target}</b> (days ${r.days} + danger ${r.dangerMod})</div>
+          <div><span>Complication Limit:</span> <b>${r.compLim}</b></div>
+        </div>
+        <div class="bars">
+          <div class="bar-block">
+            <div class="bar-label"><span>Progress</span><span>${r.progress} / ${r.target}</span></div>
+            <div class="clock-bar progress"><div style="width:${progPct}%"></div></div>
+          </div>
+          <div class="bar-block">
+            <div class="bar-label"><span>Complications</span><span>${r.complications} / ${r.compLim}</span></div>
+            <div class="clock-bar complications"><div style="width:${compPct}%"></div></div>
+          </div>
+        </div>
+
+        ${r.status === 'active' ? `
+        <div class="roll-input">
+          <label>Crew Role
+            <select id="roll-role">${roleOpts}</select>
+          </label>
+          <label>d20 Roll
+            <input type="number" id="roll-val" min="1" max="20" value="10" />
+          </label>
+          <button class="gold" id="apply-roll">Apply Roll</button>
+          <button id="auto-roll">🎲 Auto-roll d20</button>
+          <button id="next-day">▶ Next Day</button>
+          <button id="sail-event">d10 Sailing Event</button>
+          <button id="comp-detail">d12 Complication</button>
+        </div>` : `
+        <div class="btn-row">
+          <button class="gold" id="end-route">Archive Route</button>
+        </div>`}
+
+        <div class="day-log" id="day-log"></div>
+
+        <div class="btn-row">
+          <button class="danger" id="abort-route">Abort / Close Route</button>
+        </div>
+      </div>`;
+
+    // Render log
+    const logRoot = $('#day-log');
+    if (!r.log.length) logRoot.innerHTML = '<div class="entry meta">No rolls yet. Make a roll to start the voyage.</div>';
+    else {
+      logRoot.innerHTML = r.log.slice().reverse().map(e => {
+        if (e.isMeta) {
+          return `<div class="entry"><span class="meta">Day ${e.day} · ${esc(e.role)}</span><br>${esc(e.text)}</div>`;
+        }
+        const cls = e.progress > 0 ? 'pos' : (e.complication > 0 ? 'neg' : '');
+        const delta = e.progress > 0 ? `<span class="pos">+${e.progress} progress</span>`
+                    : e.complication > 0 ? `<span class="neg">+${e.complication} complication${e.setback ? ` (${esc(e.setback)})` : ''}</span>`
+                    : '<span class="meta">no change</span>';
+        return `<div class="entry">
+          <span class="meta">Day ${e.day} · ${esc(e.role)} · rolled ${e.roll} vs DC ${e.dc}</span><br>
+          ${esc(e.text)} — ${delta}
+        </div>`;
+      }).join('');
+    }
+
+    // Wire buttons
+    const applyBtn = $('#apply-roll');
+    if (applyBtn) applyBtn.addEventListener('click', () => {
+      const role = Number($('#roll-role').value);
+      const v = clamp(Number($('#roll-val').value) || 0, 1, 20);
+      applyRoll(role, v);
+    });
+    const autoBtn = $('#auto-roll');
+    if (autoBtn) autoBtn.addEventListener('click', () => {
+      const role = Number($('#roll-role').value);
+      const v = roll(20);
+      $('#roll-val').value = v;
+      applyRoll(role, v);
+    });
+    const nextBtn = $('#next-day');
+    if (nextBtn) nextBtn.addEventListener('click', nextTravelDay);
+    const seBtn = $('#sail-event');
+    if (seBtn) seBtn.addEventListener('click', rollSailingEvent);
+    const cdBtn = $('#comp-detail');
+    if (cdBtn) cdBtn.addEventListener('click', rollComplicationDetail);
+    const endBtn = $('#end-route');
+    if (endBtn) endBtn.addEventListener('click', () => { state.activeRouteId = null; save(); renderTravel(); });
+    const abortBtn = $('#abort-route');
+    if (abortBtn) abortBtn.addEventListener('click', () => endRoute('aborted'));
+  }
+
+  // History
+  const hist = $('#travel-history');
+  const others = state.routes.filter(r2 => r2.id !== state.activeRouteId);
+  if (!others.length) {
+    hist.innerHTML = '<p class="muted">No archived routes yet.</p>';
+  } else {
+    hist.innerHTML = others.map(r2 => `
+      <div class="route-card">
+        <h3>${esc(r2.start)} → ${esc(r2.dest)}
+          <span class="muted" style="font-size:0.85rem; font-weight:normal;">
+            · ${esc(r2.status.toUpperCase())} · ${r2.progress}/${r2.target} progress · ${r2.complications}/${r2.compLim} comps
+          </span>
+        </h3>
+        <div class="pair">
+          <div><span>Days:</span> <b>${r2.days}</b></div>
+          <div><span>DC:</span> <b>${r2.dc}</b></div>
+          <div><span>Created:</span> <b>${new Date(r2.createdAt).toLocaleDateString()}</b></div>
+        </div>
+        <div class="btn-row">
+          <button onclick="resumeRoute('${r2.id}')">Resume</button>
+          <button class="danger" onclick="deleteRoute('${r2.id}')">Delete</button>
+        </div>
+      </div>`).join('');
+  }
+}
+window.resumeRoute = resumeRoute;
+window.deleteRoute = deleteRoute;
+
+/* ===========================================================
+   SHIP TRACKER
+   =========================================================== */
+function bindShipFields() {
+  $$('[data-ship]').forEach(el => {
+    const k = el.dataset.ship;
+    if (state.ship[k] !== undefined) el.value = state.ship[k];
+    el.addEventListener('input', () => {
+      let v = el.value;
+      if (el.type === 'number') v = Number(v) || 0;
+      state.ship[k] = v;
+      save(); renderShip();
+    });
+  });
+  $$('[data-shipdelta]').forEach(b => b.addEventListener('click', () => {
+    const { k, d } = JSON.parse(b.dataset.shipdelta);
+    let v = (state.ship[k] || 0) + d;
+    if (k === 'hull') v = clamp(v, 0, state.ship.hullMax || 9999);
+    if (k === 'sails') v = clamp(v, 0, 100);
+    if (k === 'morale') v = clamp(v, 0, 10);
+    if (['food','water','medicine','ammo','berries','repair'].includes(k)) v = Math.max(0, v);
+    state.ship[k] = v;
+    save(); renderShip();
+  }));
+}
+
+function renderShip() {
+  const s = state.ship;
+  $('#ship-hull').textContent = s.hull;
+  $('#ship-sails').textContent = s.sails;
+  $('#ship-morale').textContent = s.morale;
+  $('#ship-food').textContent = s.food;
+  $('#ship-water').textContent = s.water;
+  $('#ship-medicine').textContent = s.medicine;
+  $('#ship-ammo').textContent = s.ammo;
+  $('#ship-berries').textContent = s.berries;
+  $('#ship-repair').textContent = s.repair;
+  const hullPct = s.hullMax ? clamp((s.hull / s.hullMax) * 100, 0, 100) : 0;
+  $('#hull-fill').style.width = hullPct + '%';
+  $('#sails-fill').style.width = clamp(s.sails, 0, 100) + '%';
+  $('#morale-fill').style.width = clamp(s.morale * 10, 0, 100) + '%';
+
+  // Crew
+  const crewRoot = $('#crew-list');
+  if (!s.crew.length) crewRoot.innerHTML = '<p class="muted">No crew added yet.</p>';
+  else {
+    crewRoot.innerHTML = s.crew.map((c, i) => `
+      <div class="crew-card" data-i="${i}">
+        <div class="grid two">
+          <label>Name<input data-cf="name" value="${esc(c.name)}" /></label>
+          <label>Role<input data-cf="role" value="${esc(c.role)}" /></label>
+          <label>HP <input type="number" data-cf="hp" value="${c.hp}" /></label>
+          <label>Max HP <input type="number" data-cf="maxHp" value="${c.maxHp}" /></label>
+          <label class="full">Status / Conditions<input data-cf="status" value="${esc(c.status)}" /></label>
+          <label class="full">Notes<textarea data-cf="notes" rows="2">${esc(c.notes)}</textarea></label>
+        </div>
+        <div class="row-end"><button class="danger" data-ca="del">Remove</button></div>
+      </div>`).join('');
+    $$('#crew-list .crew-card').forEach(card => {
+      const i = Number(card.dataset.i);
+      $$('[data-cf]', card).forEach(el => {
+        el.addEventListener('input', () => {
+          const k = el.dataset.cf;
+          state.ship.crew[i][k] = el.type === 'number' ? (Number(el.value) || 0) : el.value;
+          save();
+        });
+      });
+      $('[data-ca="del"]', card).addEventListener('click', () => {
+        if (confirm('Remove this crew member?')) {
+          state.ship.crew.splice(i,1); save(); renderShip();
+        }
+      });
+    });
+  }
+
+  // Log
+  const logRoot = $('#ship-log-list');
+  if (!s.log.length) logRoot.innerHTML = '<p class="muted">No ship events logged.</p>';
+  else {
+    logRoot.innerHTML = s.log.slice().reverse().map((e, revIdx) => {
+      const realIdx = s.log.length - 1 - revIdx;
+      return `<div class="entry">
+        <span>${esc(e.text)}</span>
+        <span class="when">${new Date(e.when).toLocaleString()}
+          <button data-lidx="${realIdx}">✕</button>
+        </span>
+      </div>`;
+    }).join('');
+    $$('#ship-log-list [data-lidx]').forEach(b => b.addEventListener('click', () => {
+      state.ship.log.splice(Number(b.dataset.lidx), 1); save(); renderShip();
+    }));
+  }
+}
+
+function addCrewMember() {
+  state.ship.crew.push({
+    name: 'New Crew', role: '', hp: 20, maxHp: 20, status: '', notes: ''
+  });
+  save(); renderShip();
+}
+
+function addShipLogEntry() {
+  const input = $('#ship-log-input');
+  const txt = input.value.trim();
+  if (!txt) return;
+  state.ship.log.push({ text: txt, when: new Date().toISOString() });
+  input.value = '';
+  save(); renderShip();
+}
+
+/* ===========================================================
    INIT
    =========================================================== */
 bindFields();
+bindShipFields();
 refreshStats();
-renderRansom();
 renderIslands();
 renderLog();
+renderTravel();
+renderShip();
+
