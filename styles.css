@@ -292,8 +292,6 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 .log-entry .status { font-size: 0.85rem; }
 .log-entry textarea { width: 100%; }
 
-.island-card { margin-bottom: 12px; }
-
 .player-card {
   background: rgba(255,255,255,0.45);
   border: 1px solid var(--gold-dark);

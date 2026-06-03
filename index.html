@@ -17,7 +17,6 @@
 
 <nav class="tabs" id="tabs">
   <button class="tab" data-tab="bounty">Bounty</button>
-  <button class="tab" data-tab="islands">Islands</button>
   <button class="tab active" data-tab="map">Map</button>
   <button class="tab" data-tab="ship">Ship Tracker</button>
   <button class="tab" data-tab="characters">Player Sheets</button>
@@ -68,17 +67,6 @@
           <li><b>Bounty 5</b> — World Government / major Marine force actively involved.</li>
         </ul>
       </div>
-    </div>
-  </section>
-
-  <!-- ISLANDS -->
-  <section class="panel" id="tab-islands">
-    <div class="parchment">
-      <h2>Island Builder</h2>
-      <div class="btn-row">
-        <button class="gold" data-action="newIsland">+ New Island</button>
-      </div>
-      <div id="island-list"></div>
     </div>
   </section>
 
@@ -417,35 +405,6 @@
   </section>
 
 </main>
-
-<template id="tpl-island">
-  <div class="parchment island-card">
-    <div class="grid two">
-      <label>Island Name<input data-f="name" /></label>
-      <label>Danger Level
-        <select data-f="danger">
-          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
-        </select>
-      </label>
-      <label>Main Faction<input data-f="faction" /></label>
-      <label>Marine Presence<input data-f="marines" /></label>
-      <label>Pirate Threat<input data-f="pirates" /></label>
-      <label>Local Problem<input data-f="problem" /></label>
-      <label class="full">Important NPCs<textarea data-f="npcs" rows="2"></textarea></label>
-      <label class="full">Devil's Ransom Clue<textarea data-f="ransom" rows="2"></textarea></label>
-      <label class="full">Peaceful Encounter Idea<textarea data-f="peaceful" rows="2"></textarea></label>
-      <label class="full">Dangerous Encounter Idea<textarea data-f="dangerous" rows="2"></textarea></label>
-      <label class="full">Strange Encounter Idea<textarea data-f="strange" rows="2"></textarea></label>
-      <label class="full">Major Consequence Idea<textarea data-f="consequence" rows="2"></textarea></label>
-      <label class="full">Available Rewards<textarea data-f="rewards" rows="2"></textarea></label>
-      <label class="full">Secret Truth<textarea data-f="secret" rows="2"></textarea></label>
-    </div>
-    <div class="btn-row">
-      <button data-act="use">Use as Current Location</button>
-      <button class="danger" data-act="delete">Delete Island</button>
-    </div>
-  </div>
-</template>
 
 <!-- Firebase Realtime Database (compat SDK). Edit firebase-config.js to enable shared sessions. -->
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>

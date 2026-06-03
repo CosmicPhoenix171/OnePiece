@@ -38,7 +38,6 @@ const DEFAULT_STATE = {
   localProblem: "Smuggling ring under the docks",
   ransomClue: "A torn map fragment shows a key-shaped island in the fog.",
   ransom: DEFAULT_RANSOM.map(p => ({ ...p, holder: "", claimed: false, clueLoc: "", rumors: "" })),
-  islands: [],
   log: [],
   routes: [],
   activeRouteId: null,
@@ -97,7 +96,6 @@ function applyRemoteState(remote) {
 }
 function rerenderAll() {
   try { if (typeof refreshStats === 'function') refreshStats(); } catch (e) { console.error(e); }
-  try { if (typeof renderIslands === 'function') renderIslands(); } catch (e) { console.error(e); }
   try { if (typeof renderLog === 'function') renderLog(); } catch (e) { console.error(e); }
   try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
   try { if (typeof renderTravel === 'function') renderTravel(); } catch (e) { console.error(e); }
@@ -296,7 +294,6 @@ document.addEventListener('click', e => {
     case 'manualMinus':    state.clock = clamp(state.clock-1,0,6); syncBoundField('clock'); save(); refreshStats(); break;
     case 'heatPlus':       state.heat = clamp(state.heat+1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
     case 'heatMinus':      state.heat = clamp(state.heat-1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
-    case 'newIsland':      addIsland(); break;
     case 'newRoute':       showNewRouteForm(true); break;
     case 'cancelNewRoute': showNewRouteForm(false); break;
     case 'createRoute':    createRouteFromForm(); break;
@@ -749,55 +746,6 @@ function renderRansom() {
       syncBoundField('piecesHeld');
       save(); refreshStats();
     });
-  });
-}
-
-/* ===========================================================
-   ISLANDS
-   =========================================================== */
-function addIsland() {
-  state.islands.push({
-    id: uid(),
-    name: "New Island", danger: "2", faction: "", marines: "", pirates: "",
-    problem: "", npcs: "", ransom: "", peaceful: "", dangerous: "",
-    strange: "", consequence: "", rewards: "", secret: ""
-  });
-  save(); renderIslands();
-}
-
-function renderIslands() {
-  const root = $('#island-list');
-  root.innerHTML = '';
-  if (!state.islands.length) {
-    root.innerHTML = '<p class="muted">No islands saved yet. Click "+ New Island" to create one.</p>';
-    return;
-  }
-  const tpl = $('#tpl-island');
-  state.islands.forEach((isl, idx) => {
-    const node = tpl.content.firstElementChild.cloneNode(true);
-    node.dataset.idx = idx;
-    $$('[data-f]', node).forEach(el => {
-      const k = el.dataset.f;
-      el.value = isl[k] ?? '';
-      el.addEventListener('input', () => { state.islands[idx][k] = el.value; save(); });
-    });
-    $('[data-act="delete"]', node).addEventListener('click', () => {
-      if (confirm(`Delete "${isl.name}"?`)) { state.islands.splice(idx,1); save(); renderIslands(); }
-    });
-    $('[data-act="use"]', node).addEventListener('click', () => {
-      state.location = isl.name;
-      state.danger = Number(isl.danger) || state.danger;
-      state.faction = isl.faction || state.faction;
-      state.marinePresence = isl.marines || state.marinePresence;
-      state.rivalPirates = isl.pirates || state.rivalPirates;
-      state.localProblem = isl.problem || state.localProblem;
-      state.ransomClue = isl.ransom || state.ransomClue;
-      save();
-      ['location','danger','faction','marinePresence','rivalPirates','localProblem','ransomClue'].forEach(syncBoundField);
-      refreshStats();
-      alert(`Loaded "${isl.name}" as current location.`);
-    });
-    root.appendChild(node);
   });
 }
 
@@ -1450,7 +1398,6 @@ bindFields();
 bindShipFields();
 initLogin();
 refreshStats();
-renderIslands();
 renderLog();
 renderPlayerSheets();
 renderTravel();
