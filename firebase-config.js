@@ -15,13 +15,14 @@
 // ---------------------------------------------------------------
 
 window.FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "",   // e.g. "https://your-project-default-rtdb.firebaseio.com"
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyBjqXtmGjNjvAFtDEB9K6E-8Jl8d1llBuM",
+  authDomain: "onepeace-389cd.firebaseapp.com",
+  databaseURL: "https://onepeace-389cd-default-rtdb.firebaseio.com",
+  projectId: "onepeace-389cd",
+  storageBucket: "onepeace-389cd.firebasestorage.app",
+  messagingSenderId: "244126010870",
+  appId: "1:244126010870:web:4854cf1c672b21c7180bd7",
+  measurementId: "G-WZPD09HDT5"
 };
 
 // Default session id when no ?session= query parameter is supplied.

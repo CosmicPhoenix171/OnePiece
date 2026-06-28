@@ -84,10 +84,14 @@ function save() {
 let __applyingRemote = false;
 function applyRemoteState(remote) {
   if (!remote || typeof remote !== 'object') return;
+  // Preserve viewer-local fields (pan/zoom, UI toggles) across remote updates
+  // so other players' edits never hijack this viewer's map viewport.
+  const localMapView = state.mapView;
   __applyingRemote = true;
   try {
     Object.keys(state).forEach((k) => { delete state[k]; });
     Object.assign(state, structuredClone(DEFAULT_STATE), remote);
+    if (localMapView) state.mapView = localMapView;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     rerenderAll();
   } finally {

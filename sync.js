@@ -39,12 +39,23 @@
 
   setStatus('syncing', 'connecting…');
 
+  // Fields that are per-viewer (pan/zoom, UI toggles) and must NOT be synced —
+  // otherwise every player hijacks every other player's viewport.
+  const LOCAL_ONLY_FIELDS = ['mapView'];
+
+  function stripLocalOnly(state) {
+    if (!state || typeof state !== 'object') return state;
+    const copy = { ...state };
+    for (const k of LOCAL_ONLY_FIELDS) delete copy[k];
+    return copy;
+  }
+
   let pushTimer = null;
   window.syncPush = function (state) {
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {
       setStatus('syncing', 'syncing…');
-      ref.set({ _writerId: writerId, _ts: Date.now(), data: state })
+      ref.set({ _writerId: writerId, _ts: Date.now(), data: stripLocalOnly(state) })
         .then(() => setStatus('connected', 'live · ' + sessionId))
         .catch((err) => {
           console.error('[sync] push failed:', err);
@@ -60,7 +71,7 @@
       // Empty session — seed it with our current local state.
       const st = typeof window.__getState === 'function' ? window.__getState() : null;
       if (st) {
-        ref.set({ _writerId: writerId, _ts: Date.now(), data: st })
+        ref.set({ _writerId: writerId, _ts: Date.now(), data: stripLocalOnly(st) })
           .catch((err) => console.error('[sync] seed failed:', err));
       }
       setStatus('connected', 'live · ' + sessionId);
