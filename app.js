@@ -826,23 +826,134 @@ function sheetMetaText(sheet) {
   return `Last update: ${new Date(sheet.updatedAt).toLocaleString()} · by ${esc(who)}`;
 }
 
-function addPlayerSheet() {
-  if (!requireUsername()) return;
-  const sheet = {
+const BODY_PARTS = [
+  { key: 'head',  num: 1, label: 'Head / Senses' },
+  { key: 'torso', num: 2, label: 'Torso / Core'  },
+  { key: 'rArm',  num: 3, label: 'Right Arm'     },
+  { key: 'lArm',  num: 4, label: 'Left Arm'      },
+  { key: 'rLeg',  num: 5, label: 'Right Leg'     },
+  { key: 'lLeg',  num: 6, label: 'Left Leg'      },
+];
+const DAMAGE_THRESHOLDS = [25, 50, 75, 100];
+const STAT_DEFS = [
+  { key: 'str', label: 'Strength' },
+  { key: 'dex', label: 'Dexterity' },
+  { key: 'con', label: 'Constitution' },
+  { key: 'int', label: 'Intelligence' },
+  { key: 'wis', label: 'Wisdom' },
+  { key: 'cha', label: 'Charisma' },
+];
+
+function statMod(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return 0;
+  return Math.floor((n - 10) / 2);
+}
+function fmtMod(m) { return (m >= 0 ? `+${m}` : `${m}`); }
+function sectionHp(maxHp) { return Math.max(1, Math.ceil((Number(maxHp) || 6) / 6)); }
+
+function makeEmptyBodyPart() {
+  return { damage: 0, states: { 25: false, 50: false, 75: false, 100: false } };
+}
+
+function makeEmptySheet() {
+  const stats = {};
+  STAT_DEFS.forEach(s => { stats[s.key] = 10; });
+  const body = {};
+  BODY_PARTS.forEach(p => { body[p.key] = makeEmptyBodyPart(); });
+  return {
     id: uid(),
-    name: 'New Character',
     player: currentUsername,
+    // Identity
+    name: 'New Character',
+    epithet: '',
     role: '',
+    age: '',
+    home: '',
+    portrait: '',
+    // Inventory
+    inventory: [],
+    // Stats
+    stats,
+    ac: 10,
+    initiative: 0,
+    speed: 30,
+    // Combat / class
     level: 1,
-    bounty: 0,
-    hp: 20,
+    charClass: '',
+    // Signature moves (4 slots)
+    moves: [
+      { name: '', desc: '' },
+      { name: '', desc: '' },
+      { name: '', desc: '' },
+      { name: '', desc: '' },
+    ],
+    // Flashback Power-Up (3 charges)
+    flashback: 0,
+    // Health
     maxHp: 20,
+    hp: 20,
+    tempHp: 0,
+    // Scars
+    scars: { physical: '', emotional: '', reputation: '' },
+    // Devil's Ransom
+    ransom: { piece: '', curseName: '', curseDC: 10 },
+    // Bounty
+    bounty: 0,
+    // Cinematic Health Tracker
+    deathSaves: { success: [false, false, false], fail: [false, false, false] },
+    body,
+    healthNotes: '',
+    // (legacy) Devil Fruit + notes
     devilFruit: '',
     notes: '',
     updatedBy: currentUsername,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
   };
-  state.playerSheets.unshift(sheet);
+}
+
+/* Fill missing fields on old sheets so the new UI renders safely. */
+function normalizeSheet(pc) {
+  if (!pc || typeof pc !== 'object') return makeEmptySheet();
+  const base = makeEmptySheet();
+  const merged = Object.assign(base, pc);
+  merged.stats = Object.assign({}, base.stats, pc.stats || {});
+  merged.scars = Object.assign({}, base.scars, pc.scars || {});
+  merged.ransom = Object.assign({}, base.ransom, pc.ransom || {});
+  merged.inventory = Array.isArray(pc.inventory) ? pc.inventory.map(it => ({
+    item: String(it?.item ?? ''),
+    qty: Number(it?.qty) || 0,
+    weight: String(it?.weight ?? ''),
+  })) : [];
+  merged.moves = (Array.isArray(pc.moves) ? pc.moves : []).slice(0, 4);
+  while (merged.moves.length < 4) merged.moves.push({ name: '', desc: '' });
+  merged.moves = merged.moves.map(m => ({ name: String(m?.name ?? ''), desc: String(m?.desc ?? '') }));
+  const ds = pc.deathSaves || {};
+  merged.deathSaves = {
+    success: [0,1,2].map(i => Boolean(ds.success?.[i])),
+    fail:    [0,1,2].map(i => Boolean(ds.fail?.[i])),
+  };
+  const bodyIn = pc.body || {};
+  merged.body = {};
+  BODY_PARTS.forEach(p => {
+    const src = bodyIn[p.key] || {};
+    merged.body[p.key] = {
+      damage: Number(src.damage) || 0,
+      states: {
+        25:  Boolean(src.states?.[25]),
+        50:  Boolean(src.states?.[50]),
+        75:  Boolean(src.states?.[75]),
+        100: Boolean(src.states?.[100]),
+      },
+    };
+  });
+  merged.flashback = clamp(Number(pc.flashback) || 0, 0, 3);
+  return merged;
+}
+
+function addPlayerSheet() {
+  if (!requireUsername()) return;
+  state.playerSheets.unshift(makeEmptySheet());
   save();
   renderPlayerSheets();
   showTab('characters');
@@ -853,84 +964,427 @@ function renderPlayerSheets() {
   if (!root) return;
 
   if (!Array.isArray(state.playerSheets)) state.playerSheets = [];
+  // Normalize any legacy sheets in place so they pick up the new fields.
+  state.playerSheets = state.playerSheets.map(normalizeSheet);
+
   if (!state.playerSheets.length) {
     root.innerHTML = '<p class="muted">No character sheets yet. Click "+ Add Character Sheet" to start.</p>';
     return;
   }
 
-  root.innerHTML = state.playerSheets.map((pc, idx) => `
-    <div class="player-card" data-pidx="${idx}">
-      <div class="grid two">
-        <label>Character Name<input type="text" data-pf="name" value="${esc(pc.name)}" /></label>
-        <label>Player Username<input type="text" data-pf="player" value="${esc(pc.player)}" /></label>
-        <label>Crew Role<input type="text" data-pf="role" value="${esc(pc.role)}" placeholder="Captain, Swordsman, Navigator..." /></label>
-        <label>Level<input type="number" data-pf="level" min="1" value="${Number(pc.level) || 1}" /></label>
-        <label>Bounty (berries)<input type="number" data-pf="bounty" min="0" step="100" value="${Math.max(0, Number(pc.bounty) || 0)}" /></label>
-        <label>Devil Fruit<input type="text" data-pf="devilFruit" value="${esc(pc.devilFruit)}" placeholder="e.g. Gomu Gomu no Mi" /></label>
-        <label>HP<input type="number" data-pf="hp" min="0" value="${Math.max(0, Number(pc.hp) || 0)}" /></label>
-        <label>Max HP<input type="number" data-pf="maxHp" min="1" value="${Math.max(1, Number(pc.maxHp) || 1)}" /></label>
-        <label class="full">Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
-      </div>
-      <div class="btn-row">
-        <button type="button" data-pa="hpdelta" data-delta="-1">-1 HP</button>
-        <button type="button" data-pa="hpdelta" data-delta="1">+1 HP</button>
-        <button type="button" data-pa="hpdelta" data-delta="5">+5 HP</button>
-        <button type="button" class="danger" data-pa="delete">Delete Sheet</button>
-      </div>
-      <div class="muted updated-meta">${sheetMetaText(pc)}</div>
-    </div>
-  `).join('');
+  root.innerHTML = state.playerSheets.map((pc, idx) => renderSheetHtml(pc, idx)).join('');
 
   $$('.player-card', root).forEach(card => {
     const idx = Number(card.dataset.pidx);
     const sheet = state.playerSheets[idx];
     if (!sheet) return;
+    attachSheetHandlers(card, sheet, idx);
+  });
+}
 
-    const metaEl = $('.updated-meta', card);
-    const refreshMeta = () => {
-      if (metaEl) metaEl.textContent = sheetMetaText(sheet);
+function renderSheetHtml(pc, idx) {
+  const sec = sectionHp(pc.maxHp);
+  const totalDmg = BODY_PARTS.reduce((sum, p) => sum + (Number(pc.body?.[p.key]?.damage) || 0), 0);
+
+  const statsHtml = STAT_DEFS.map(s => {
+    const score = Number(pc.stats?.[s.key]) || 0;
+    return `
+      <div class="stat-row">
+        <div class="stat-name">${s.label}</div>
+        <label class="stat-cell"><span>Score</span><input type="number" data-pf="stat:${s.key}" value="${score}" /></label>
+        <div class="stat-cell mod"><span>Mod</span><b>${fmtMod(statMod(score))}</b></div>
+      </div>`;
+  }).join('');
+
+  const invRows = (pc.inventory.length ? pc.inventory : []).map((row, ri) => `
+    <tr data-inv-row="${ri}">
+      <td><input type="text" data-pf="inv:item:${ri}"   value="${esc(row.item)}"   placeholder="e.g. Cutlass" /></td>
+      <td><input type="number" data-pf="inv:qty:${ri}"  value="${Number(row.qty) || 0}" min="0" /></td>
+      <td><input type="text" data-pf="inv:weight:${ri}" value="${esc(row.weight)}" placeholder="—" /></td>
+      <td><button type="button" class="danger small" data-pa="inv-del" data-row="${ri}">×</button></td>
+    </tr>`).join('');
+
+  const movesHtml = pc.moves.map((m, mi) => `
+    <div class="move-block">
+      <div class="move-head">SIGNATURE MOVE ${mi + 1}</div>
+      <label>Name<input type="text" data-pf="move:name:${mi}" value="${esc(m.name)}" /></label>
+      <label>What It Does<input type="text" data-pf="move:desc:${mi}" value="${esc(m.desc)}" /></label>
+    </div>`).join('');
+
+  const flashHtml = [0,1,2].map(i => `
+    <span class="flash-circle ${i < pc.flashback ? 'filled' : ''}" data-pa="flash" data-i="${i}" title="Flashback charge ${i+1}"></span>
+  `).join('');
+
+  const deathSaveHtml = ['success','fail'].map(kind => `
+    <div class="ds-row ${kind}">
+      <span>${kind === 'success' ? 'Success' : 'Fail'}</span>
+      ${[0,1,2].map(i => `
+        <label class="ds-box"><input type="checkbox" data-pf="ds:${kind}:${i}" ${pc.deathSaves[kind][i] ? 'checked' : ''} /><span></span></label>
+      `).join('')}
+    </div>`).join('');
+
+  const bodyPartHtml = (p) => {
+    const part = pc.body[p.key];
+    return `
+      <div class="body-part" data-part="${p.key}">
+        <div class="body-part-head"><span class="num">${p.num}</span>${p.label}</div>
+        <label>Section HP<input type="text" class="cht-section-hp" value="${sec}" readonly tabindex="-1" /></label>
+        <label>Damage Taken<input type="number" data-pf="body:damage:${p.key}" value="${Number(part.damage) || 0}" min="0" /></label>
+        <div class="state-row">
+          ${DAMAGE_THRESHOLDS.map(t => `
+            <label class="state-box">
+              <input type="checkbox" data-pf="body:state:${p.key}:${t}" ${part.states[t] ? 'checked' : ''} />
+              <span>${t}%</span>
+            </label>`).join('')}
+        </div>
+      </div>`;
+  };
+  const leftBodyHtml  = BODY_PARTS.slice(0, 3).map(bodyPartHtml).join('');
+  const rightBodyHtml = BODY_PARTS.slice(3, 6).map(bodyPartHtml).join('');
+
+  return `
+  <article class="player-card sheet-card" data-pidx="${idx}">
+    <header class="sheet-banner">
+      <div class="sheet-banner-side">
+        <span class="sheet-skull">☠</span>
+      </div>
+      <h2 class="sheet-banner-title">WANTED</h2>
+      <div class="sheet-banner-side right">
+        <span class="sheet-compass">✦</span>
+      </div>
+    </header>
+
+    <div class="sheet-top">
+      <section class="sheet-identity">
+        <label>Name<input type="text" data-pf="name" value="${esc(pc.name)}" /></label>
+        <label>Epithet / Title<input type="text" data-pf="epithet" value="${esc(pc.epithet)}" placeholder="e.g. Straw Hat" /></label>
+        <label>Crew Role<input type="text" data-pf="role" value="${esc(pc.role)}" placeholder="Captain, Navigator..." /></label>
+        <label>Age<input type="text" data-pf="age" value="${esc(pc.age)}" /></label>
+        <label>Home Sea / Island<input type="text" data-pf="home" value="${esc(pc.home)}" /></label>
+        <label>Player Username<input type="text" data-pf="player" value="${esc(pc.player)}" /></label>
+      </section>
+
+      <section class="sheet-portrait">
+        <div class="portrait-frame" style="${pc.portrait ? `background-image:url('${esc(pc.portrait)}')` : ''}">
+          ${pc.portrait ? '' : '<span class="portrait-hint">Portrait</span>'}
+        </div>
+        <div class="btn-row">
+          <input type="file" accept="image/*" class="hidden" data-pa="portrait-file" aria-label="Portrait file" title="Portrait file" />
+          <button type="button" data-pa="portrait-upload">Upload Portrait</button>
+          ${pc.portrait ? '<button type="button" class="danger" data-pa="portrait-clear">Clear</button>' : ''}
+        </div>
+      </section>
+
+      <section class="sheet-inventory">
+        <h3>Inventory / Equipment</h3>
+        <table class="inv-table">
+          <thead><tr><th>Item Name</th><th>Qty</th><th>Weight / Value</th><th></th></tr></thead>
+          <tbody>${invRows || '<tr><td colspan="4" class="muted">No items yet.</td></tr>'}</tbody>
+        </table>
+        <button type="button" data-pa="inv-add">+ Add Item</button>
+      </section>
+    </div>
+
+    <div class="sheet-mid">
+      <section class="sheet-stats">
+        <h3>Stats</h3>
+        <div class="stat-grid">${statsHtml}</div>
+        <div class="combat-grid">
+          <label>Armor Class<input type="number" data-pf="ac" value="${Number(pc.ac) || 0}" /></label>
+          <label>Initiative<input type="number" data-pf="initiative" value="${Number(pc.initiative) || 0}" /></label>
+          <label>Speed<input type="number" data-pf="speed" value="${Number(pc.speed) || 0}" /></label>
+          <label>Level<input type="number" data-pf="level" min="1" value="${Math.max(1, Number(pc.level) || 1)}" /></label>
+          <label>Class<input type="text" data-pf="charClass" value="${esc(pc.charClass)}" placeholder="e.g. Swordsman" /></label>
+          <label>Devil Fruit<input type="text" data-pf="devilFruit" value="${esc(pc.devilFruit)}" placeholder="e.g. Gomu Gomu no Mi" /></label>
+        </div>
+        <div class="flashback-block">
+          <div class="flashback-title">Flashback Power-Up</div>
+          <div class="flashback-circles">${flashHtml}</div>
+          <div class="muted">Click circles to spend / regain (0–3)</div>
+        </div>
+      </section>
+
+      <section class="sheet-moves">${movesHtml}</section>
+    </div>
+
+    <div class="sheet-bottom-row">
+      <section class="sheet-health">
+        <h3>Health</h3>
+        <label>Max HP<input type="number" data-pf="maxHp" min="1" value="${Math.max(1, Number(pc.maxHp) || 1)}" /></label>
+        <label>Current HP<input type="number" data-pf="hp" min="0" value="${Math.max(0, Number(pc.hp) || 0)}" /></label>
+        <label>Temp HP<input type="number" data-pf="tempHp" min="0" value="${Math.max(0, Number(pc.tempHp) || 0)}" /></label>
+        <div class="btn-row">
+          <button type="button" data-pa="hpdelta" data-delta="-5">-5</button>
+          <button type="button" data-pa="hpdelta" data-delta="-1">-1</button>
+          <button type="button" data-pa="hpdelta" data-delta="1">+1</button>
+          <button type="button" data-pa="hpdelta" data-delta="5">+5</button>
+        </div>
+      </section>
+
+      <section class="sheet-scars">
+        <h3>Lasting Scars</h3>
+        <label>Physical Scar<input type="text" data-pf="scars:physical" value="${esc(pc.scars.physical)}" /></label>
+        <label>Emotional Scar<input type="text" data-pf="scars:emotional" value="${esc(pc.scars.emotional)}" /></label>
+        <label>Reputation Scar<input type="text" data-pf="scars:reputation" value="${esc(pc.scars.reputation)}" /></label>
+      </section>
+
+      <section class="sheet-ransom">
+        <h3>Devil's Ransom Connection</h3>
+        <label>Piece Carried<input type="text" data-pf="ransom:piece" value="${esc(pc.ransom.piece)}" placeholder="e.g. The Coral Eye" /></label>
+        <label>Curse Name<input type="text" data-pf="ransom:curseName" value="${esc(pc.ransom.curseName)}" /></label>
+        <label>Curse Pull DC<input type="number" data-pf="ransom:curseDC" min="0" value="${Number(pc.ransom.curseDC) || 0}" /></label>
+      </section>
+    </div>
+
+    <footer class="sheet-bounty">
+      <span class="bounty-label">BOUNTY</span>
+      <input type="number" data-pf="bounty" min="0" step="100" value="${Math.max(0, Number(pc.bounty) || 0)}" />
+      <span class="bounty-unit">berries</span>
+    </footer>
+
+    <!-- ============ CINEMATIC HEALTH TRACKER ============ -->
+    <header class="sheet-banner small">
+      <h3 class="sheet-banner-title">CINEMATIC HEALTH TRACKER</h3>
+      <div class="sheet-banner-sub">Pirate Anime D&amp;D — segmented body HP system</div>
+    </header>
+
+    <div class="cht-top">
+      <div class="cht-stat"><div class="cht-stat-label">♥ MAX HP</div><div class="cht-stat-val">${Number(pc.maxHp) || 0}</div></div>
+      <div class="cht-stat"><div class="cht-stat-label">❤ CURRENT HP</div><div class="cht-stat-val">${Number(pc.hp) || 0}</div></div>
+      <div class="cht-stat"><div class="cht-stat-label">⚔ TOTAL DAMAGE</div><div class="cht-stat-val">${totalDmg}</div></div>
+      <div class="cht-stat"><div class="cht-stat-label">🛡 SECTION HP <span class="muted">(÷6)</span></div><div class="cht-stat-val">${sec}</div></div>
+      <div class="cht-stat death-saves">
+        <div class="cht-stat-label">☠ DEATH SAVES</div>
+        ${deathSaveHtml}
+      </div>
+    </div>
+
+    <div class="cht-body">
+      <div class="cht-col left">${leftBodyHtml}</div>
+      <div class="cht-silhouette" aria-hidden="true">
+        <img src="assets/Charicter HP.png" alt="" />
+      </div>
+      <div class="cht-col right">${rightBodyHtml}</div>
+    </div>
+
+    <table class="damage-states-table">
+      <thead><tr><th>State</th><th>25% Wounded</th><th>50% Bleeding</th><th>75% Crumpled</th><th>100% Disabled</th></tr></thead>
+      <tbody><tr>
+        <th>Effect</th>
+        <td>No effect</td>
+        <td>-1 HP per round</td>
+        <td>Disadvantage if using the limb</td>
+        <td>Can't use that limb</td>
+      </tr></tbody>
+    </table>
+
+    <section class="sheet-notes">
+      <h3>Notes / Scars / Lingering Injuries</h3>
+      <textarea data-pf="healthNotes" rows="4" placeholder="Track lingering injuries, scars, and story notes here...">${esc(pc.healthNotes)}</textarea>
+      <label class="full">General Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
+    </section>
+
+    <div class="btn-row sheet-actions">
+      <button type="button" class="danger" data-pa="delete">Delete Sheet</button>
+    </div>
+    <div class="muted updated-meta">${sheetMetaText(pc)}</div>
+  </article>`;
+}
+
+function attachSheetHandlers(card, sheet, idx) {
+  const metaEl = $('.updated-meta', card);
+  const refreshMeta = () => { if (metaEl) metaEl.textContent = sheetMetaText(sheet); };
+
+  const persist = () => {
+    stampSheetEdit(sheet);
+    save();
+    refreshMeta();
+  };
+
+  const totalDamage = () =>
+    BODY_PARTS.reduce((sum, p) => sum + (Number(sheet.body?.[p.key]?.damage) || 0), 0);
+
+  const refreshDerived = () => {
+    // stat mods
+    STAT_DEFS.forEach(s => {
+      const row = card.querySelector(`[data-pf="stat:${s.key}"]`);
+      if (!row) return;
+      const modEl = row.closest('.stat-row')?.querySelector('.stat-cell.mod b');
+      if (modEl) modEl.textContent = fmtMod(statMod(sheet.stats[s.key]));
+    });
+    // cht stat row
+    const cht = card.querySelectorAll('.cht-top .cht-stat-val');
+    if (cht.length >= 4) {
+      cht[0].textContent = Number(sheet.maxHp) || 0;
+      cht[1].textContent = Number(sheet.hp) || 0;
+      cht[2].textContent = totalDamage();
+      cht[3].textContent = sectionHp(sheet.maxHp);
+    }
+    // section HP per body part
+    card.querySelectorAll('.cht-section-hp').forEach(el => { el.value = sectionHp(sheet.maxHp); });
+  };
+
+  // ---------- field bindings (data-pf="key" or "ns:sub" etc.) ----------
+  $$('[data-pf]', card).forEach(el => {
+    const handler = () => {
+      if (!requireUsername()) return;
+      const path = el.dataset.pf.split(':');
+      const ns = path[0];
+      let value;
+      if (el.type === 'checkbox') value = el.checked;
+      else if (el.type === 'number') value = Number(el.value) || 0;
+      else value = el.value;
+
+      switch (ns) {
+        case 'stat': {
+          const k = path[1];
+          sheet.stats[k] = Math.max(0, value);
+          refreshDerived();
+          persist();
+          return;
+        }
+        case 'inv': {
+          const field = path[1];
+          const ri = Number(path[2]);
+          if (!sheet.inventory[ri]) return;
+          if (field === 'qty') sheet.inventory[ri].qty = Math.max(0, value);
+          else sheet.inventory[ri][field] = value;
+          persist();
+          return;
+        }
+        case 'move': {
+          const field = path[1];
+          const mi = Number(path[2]);
+          if (!sheet.moves[mi]) sheet.moves[mi] = { name: '', desc: '' };
+          sheet.moves[mi][field] = value;
+          persist();
+          return;
+        }
+        case 'scars':
+          sheet.scars[path[1]] = value;
+          persist();
+          return;
+        case 'ransom':
+          sheet.ransom[path[1]] = path[1] === 'curseDC' ? Math.max(0, value) : value;
+          persist();
+          return;
+        case 'ds': {
+          const kind = path[1];
+          const i = Number(path[2]);
+          sheet.deathSaves[kind][i] = Boolean(value);
+          persist();
+          return;
+        }
+        case 'body': {
+          const field = path[1];
+          const pk = path[2];
+          if (field === 'damage') sheet.body[pk].damage = Math.max(0, value);
+          else if (field === 'state') sheet.body[pk].states[path[3]] = Boolean(value);
+          refreshDerived();
+          persist();
+          return;
+        }
+        default: {
+          const key = ns;
+          if (key === 'maxHp') {
+            sheet.maxHp = Math.max(1, value);
+            if (sheet.hp > sheet.maxHp) {
+              sheet.hp = sheet.maxHp;
+              const hpInput = card.querySelector('[data-pf="hp"]');
+              if (hpInput) hpInput.value = sheet.hp;
+            }
+            refreshDerived();
+            persist();
+            return;
+          }
+          if (key === 'hp')      value = clamp(value, 0, Math.max(1, Number(sheet.maxHp) || 1));
+          if (key === 'tempHp')  value = Math.max(0, value);
+          if (key === 'bounty')  value = Math.max(0, value);
+          if (key === 'level')   value = Math.max(1, value);
+          if (key === 'ac' || key === 'speed') value = Math.max(0, value);
+          sheet[key] = value;
+          if (key === 'hp') refreshDerived();
+          persist();
+        }
+      }
     };
+    el.addEventListener('input', handler);
+    if (el.type === 'checkbox') el.addEventListener('change', handler);
+  });
 
-    $$('[data-pf]', card).forEach(el => {
-      el.addEventListener('input', () => {
-        if (!requireUsername()) return;
-        const key = el.dataset.pf;
-        let value = el.type === 'number' ? (Number(el.value) || 0) : el.value;
-        if (key === 'level') value = Math.max(1, value);
-        if (key === 'bounty') value = Math.max(0, value);
-        if (key === 'maxHp') value = Math.max(1, value);
-        if (key === 'hp') value = Math.max(0, value);
-        sheet[key] = value;
-        if (sheet.hp > sheet.maxHp) sheet.hp = sheet.maxHp;
-        stampSheetEdit(sheet);
-        save();
-        refreshMeta();
-      });
+  // ---------- action buttons (these can re-render safely; no text focus) ----------
+  $$('[data-pa]', card).forEach(btn => {
+    const act = btn.dataset.pa;
+    btn.addEventListener('click', () => {
+      if (act !== 'portrait-file' && !requireUsername()) return;
+      switch (act) {
+        case 'hpdelta': {
+          const delta = Number(btn.dataset.delta) || 0;
+          sheet.hp = clamp((Number(sheet.hp) || 0) + delta, 0, Math.max(1, Number(sheet.maxHp) || 1));
+          const hpInput = card.querySelector('[data-pf="hp"]');
+          if (hpInput) hpInput.value = sheet.hp;
+          refreshDerived();
+          persist();
+          break;
+        }
+        case 'flash': {
+          const i = Number(btn.dataset.i);
+          // Click filled circle to clear from there; click empty to fill up to it.
+          sheet.flashback = (sheet.flashback === i + 1) ? i : i + 1;
+          card.querySelectorAll('.flash-circle').forEach((el, j) => {
+            el.classList.toggle('filled', j < sheet.flashback);
+          });
+          persist();
+          break;
+        }
+        case 'inv-add':
+          sheet.inventory.push({ item: '', qty: 1, weight: '' });
+          save();
+          renderPlayerSheets();
+          break;
+        case 'inv-del': {
+          const ri = Number(btn.dataset.row);
+          sheet.inventory.splice(ri, 1);
+          save();
+          renderPlayerSheets();
+          break;
+        }
+        case 'portrait-upload': {
+          const fileInput = card.querySelector('[data-pa="portrait-file"]');
+          if (fileInput) fileInput.click();
+          break;
+        }
+        case 'portrait-clear':
+          sheet.portrait = '';
+          save();
+          renderPlayerSheets();
+          break;
+        case 'delete':
+          if (!confirm(`Delete ${sheet.name || 'this'} character sheet?`)) return;
+          state.playerSheets.splice(idx, 1);
+          save();
+          renderPlayerSheets();
+          break;
+      }
     });
+  });
 
-    $$('[data-pa="hpdelta"]', card).forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (!requireUsername()) return;
-        const delta = Number(btn.dataset.delta) || 0;
-        sheet.hp = clamp((Number(sheet.hp) || 0) + delta, 0, Math.max(1, Number(sheet.maxHp) || 1));
-        const hpInput = $('[data-pf="hp"]', card);
-        if (hpInput) hpInput.value = sheet.hp;
-        stampSheetEdit(sheet);
-        save();
-        refreshMeta();
-      });
-    });
-
-    const delBtn = $('[data-pa="delete"]', card);
-    if (delBtn) {
-      delBtn.addEventListener('click', () => {
-        if (!confirm(`Delete ${sheet.name || 'this'} character sheet?`)) return;
-        state.playerSheets.splice(idx, 1);
+  // Portrait file input -> data URL
+  const fileEl = $('[data-pa="portrait-file"]', card);
+  if (fileEl) {
+    fileEl.addEventListener('change', () => {
+      if (!requireUsername()) return;
+      const f = fileEl.files && fileEl.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        sheet.portrait = String(reader.result || '');
         save();
         renderPlayerSheets();
-      });
-    }
-  });
+      };
+      reader.readAsDataURL(f);
+    });
+  }
 }
 
 /* ===========================================================
