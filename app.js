@@ -54,6 +54,7 @@ const DEFAULT_STATE = {
     log: []
   },
   playerSheets: [],
+  playerNotes: {},
   mapMarkers: [],
   mapImageData: '',
   mapImageName: '',
@@ -766,8 +767,88 @@ function renderRansom() {
    =========================================================== */
 const STATUSES = ['Unused','Active','Resolved','Changed by player choice','Returning later'];
 
+let __notesViewing = '';
+
 function renderLog() {
+  if (!state.playerNotes || typeof state.playerNotes !== 'object') state.playerNotes = {};
+
+  // Player notes (everyone) — only this user can read their own notes; GM can read all.
+  const notesRoot = $('#notes-area');
+  if (notesRoot) renderPlayerNotes(notesRoot);
+
+  // Encounter archive — keep visible to the GM only.
+  const archive = $('#encounter-archive');
+  if (archive) archive.style.display = isGmUser() ? '' : 'none';
+
+  renderEncounterArchive();
+}
+
+function renderPlayerNotes(root) {
+  if (!currentUsername) {
+    root.innerHTML = '<p class="muted">Log in to write personal log entries.</p>';
+    root.dataset.notesSig = '';
+    return;
+  }
+  const gm = isGmUser();
+  if (!gm) __notesViewing = currentUsername;
+
+  // Build the list of users who have notes; always include the current user.
+  const knownUsers = Object.keys(state.playerNotes || {});
+  if (currentUsername && !knownUsers.includes(currentUsername)) knownUsers.push(currentUsername);
+  knownUsers.sort((a, b) => a.localeCompare(b));
+
+  if (!knownUsers.includes(__notesViewing)) __notesViewing = currentUsername;
+
+  // Only rebuild the DOM when the structure changes — avoids clobbering an
+  // active textarea (and losing keystrokes) when remote sync fires.
+  const signature = `${gm ? 'gm' : 'pc'}|${currentUsername}|${knownUsers.join(',')}|${__notesViewing}`;
+  if (root.dataset.notesSig !== signature) {
+    root.dataset.notesSig = signature;
+    const selectorHtml = gm
+      ? `<label class="notes-select-label">
+           <span>Viewing notes for:</span>
+           <select id="notes-user-select">
+             ${knownUsers.map(u => `<option value="${esc(u)}" ${u===__notesViewing?'selected':''}>${esc(u)}${u===currentUsername?' (you)':''}</option>`).join('')}
+           </select>
+         </label>`
+      : '';
+
+    root.innerHTML = `
+      ${selectorHtml}
+      <textarea id="notes-textarea" rows="18"
+        placeholder="Personal log entries — only you (and the GM) can read these."></textarea>
+    `;
+
+    const sel = $('#notes-user-select', root);
+    if (sel) sel.addEventListener('change', () => {
+      __notesViewing = sel.value;
+      renderPlayerNotes(root);
+    });
+
+    const ta = $('#notes-textarea', root);
+    if (ta) {
+      ta.addEventListener('input', () => {
+        const canEdit = isGmUser() || __notesViewing === currentUsername;
+        if (!canEdit) return;
+        state.playerNotes[__notesViewing] = ta.value;
+        save();
+      });
+    }
+  }
+
+  // Sync content + edit-state without touching the user's cursor.
+  const ta = $('#notes-textarea', root);
+  if (ta) {
+    const value = state.playerNotes[__notesViewing] || '';
+    if (document.activeElement !== ta && ta.value !== value) ta.value = value;
+    const canEdit = gm || __notesViewing === currentUsername;
+    ta.readOnly = !canEdit;
+  }
+}
+
+function renderEncounterArchive() {
   const root = $('#log-list');
+  if (!root) return;
   if (!state.log.length) { root.innerHTML = '<p class="muted">No encounters generated yet.</p>'; return; }
   root.innerHTML = '';
   state.log.forEach((enc, idx) => {

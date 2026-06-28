@@ -292,6 +292,46 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 .log-entry .status { font-size: 0.85rem; }
 .log-entry textarea { width: 100%; }
 
+/* Captain's Log — player notes area */
+#notes-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.notes-select-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: #4a2a0a;
+}
+.notes-select-label select { min-width: 180px; }
+#notes-textarea {
+  width: 100%;
+  min-height: 320px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  line-height: 1.45;
+  background: rgba(255, 252, 240, 0.85);
+}
+#notes-textarea[readonly] {
+  background: rgba(220, 215, 200, 0.6);
+  color: #3d2a10;
+  cursor: default;
+}
+.encounter-archive {
+  margin-top: 16px;
+  border-top: 1px dashed var(--gold-dark);
+  padding-top: 10px;
+}
+.encounter-archive > summary {
+  cursor: pointer;
+  font-weight: bold;
+  color: #4a2a0a;
+  padding: 4px 0;
+}
+
 .player-card {
   background: rgba(255,255,255,0.45);
   border: 1px solid var(--gold-dark);
