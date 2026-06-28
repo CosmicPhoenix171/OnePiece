@@ -31,9 +31,9 @@ let mapRoutePick = { active: false, startMarkerId: null, allowMapPoint: false };
    Players see a dark fog over the map with a soft circular hole around
    each ship marker (and the moving ship on an active route).
    The GM (logged in as username "GM", case-insensitive) sees no fog. */
-const FOG_RADIUS = 110;     // map units around each ship
-const FOG_OPACITY = 0.94;
-const FOG_COLOR = '#06101f';
+const FOG_RADIUS = 55;      // map units around each ship (was 110, shrunk 50%)
+const FOG_OPACITY = 1;      // fully opaque fog
+const FOG_COLOR = '#7d7d7d'; // neutral gray
 
 function isGmUser() {
   return typeof currentUsername === 'string'

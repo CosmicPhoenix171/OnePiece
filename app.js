@@ -105,6 +105,7 @@ function rerenderAll() {
   try { if (typeof renderTravel === 'function') renderTravel(); } catch (e) { console.error(e); }
   try { if (typeof renderShip === 'function') renderShip(); } catch (e) { console.error(e); }
   try { if (typeof renderMap === 'function') renderMap(); } catch (e) { console.error(e); }
+  try { if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields(); } catch (e) { console.error(e); }
   $$('[data-bind]').forEach((el) => {
     const key = el.dataset.bind;
     if (state[key] !== undefined && document.activeElement !== el) el.value = state[key];
@@ -141,6 +142,9 @@ function setUsername(name) {
   if (currentUsername) localStorage.setItem(USERNAME_KEY, currentUsername);
   else localStorage.removeItem(USERNAME_KEY);
   updateLoginUI();
+  // After login, make sure non-GM users have their own sheet and re-render it.
+  try { ensureOwnSheet(); } catch (e) { console.error(e); }
+  try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
 }
 
 function updateLoginUI() {
@@ -184,6 +188,8 @@ function initLogin() {
     });
   }
   updateLoginUI();
+  // Restored session: make sure the current user already has their sheet.
+  try { ensureOwnSheet(); } catch (e) { console.error(e); }
 }
 
 const DANGER_LABELS = { 1:"Safe or familiar area", 2:"Risky area", 3:"Dangerous area", 4:"Deadly area", 5:"Nightmare area" };
@@ -913,6 +919,9 @@ function makeEmptySheet() {
     // (legacy) Devil Fruit + notes
     devilFruit: '',
     notes: '',
+    // Live PDF form values: { field_name: value } matching the AcroForm field
+    // names in assets/Wanted_Character_Sheet_Fillable.pdf.
+    pdfFields: {},
     updatedBy: currentUsername,
     updatedAt: new Date().toISOString(),
   };
@@ -954,15 +963,105 @@ function normalizeSheet(pc) {
     };
   });
   merged.flashback = clamp(Number(pc.flashback) || 0, 0, 3);
+  merged.pdfFields = (pc.pdfFields && typeof pc.pdfFields === 'object') ? { ...pc.pdfFields } : {};
+  // First time we see a legacy sheet, seed pdfFields from the structured data
+  // so the embedded PDF form opens pre-populated.
+  if (!pc.pdfFields || !Object.keys(pc.pdfFields).length) {
+    seedPdfFieldsFromLegacy(merged);
+  }
   return merged;
+}
+
+/* Map legacy structured sheet fields into the new pdfFields map, keyed by the
+   actual AcroForm field names inside Wanted_Character_Sheet_Fillable.pdf. */
+function seedPdfFieldsFromLegacy(sheet) {
+  const f = sheet.pdfFields;
+  const put = (k, v) => { if (v !== undefined && v !== null && v !== '' && f[k] === undefined) f[k] = String(v); };
+  put('character_name', sheet.name);
+  put('epithet_title',  sheet.epithet);
+  put('crew_role',      sheet.role);
+  put('age',            sheet.age);
+  put('home_sea_island', sheet.home);
+  ['str','dex','con','int','wis','cha'].forEach((k) => {
+    const long = { str:'strength', dex:'dexterity', con:'constitution', int:'intelligence', wis:'wisdom', cha:'charisma' }[k];
+    if (sheet.stats?.[k] !== undefined) {
+      put(`${long}_score`, sheet.stats[k]);
+      put(`${long}_mod`,   fmtMod(statMod(sheet.stats[k])));
+    }
+  });
+  put('armor_class', sheet.ac);
+  put('initiative',  sheet.initiative);
+  put('speed',       sheet.speed);
+  put('max_hp',      sheet.maxHp);
+  put('current_hp',  sheet.hp);
+  put('temp_hp',     sheet.tempHp);
+  put('bounty',      sheet.bounty);
+  (sheet.moves || []).slice(0,4).forEach((m, i) => {
+    put(`signature_move_${i+1}_name`,        m?.name);
+    put(`signature_move_${i+1}_description`, m?.desc);
+  });
+  (sheet.inventory || []).slice(0,6).forEach((row, i) => {
+    put(`inventory_item_${i+1}`,         row?.item);
+    put(`inventory_quantity_${i+1}`,     row?.qty);
+    put(`inventory_weight_value_${i+1}`, row?.weight);
+  });
+  put('physical_scar',              sheet.scars?.physical);
+  put('emotional_scar',             sheet.scars?.emotional);
+  put('reputation_scar',            sheet.scars?.reputation);
+  put('devils_ransom_piece_casted', sheet.ransom?.piece);
+  put('devils_ransom_curse_name',   sheet.ransom?.curseName);
+  put('devils_ransom_curse_pull_dc', sheet.ransom?.curseDC);
+  // Flashback charges → checkboxes
+  for (let i = 1; i <= 3; i++) {
+    if (i <= (Number(sheet.flashback) || 0)) f[`flashback_power_up_${i}`] = true;
+  }
+}
+
+/* True when the logged-in user has GM-level access (case-insensitive). */
+function isGmUser() {
+  return typeof currentUsername === 'string'
+    && currentUsername.trim().toLowerCase() === 'gm';
+}
+
+/* Ensure the logged-in (non-GM) user has exactly one sheet of their own. */
+function ensureOwnSheet() {
+  if (!currentUsername || isGmUser()) return;
+  if (!Array.isArray(state.playerSheets)) state.playerSheets = [];
+  const owned = state.playerSheets.find((s) => s && s.player === currentUsername);
+  if (owned) return;
+  const sheet = makeEmptySheet();
+  sheet.player = currentUsername;
+  sheet.name = currentUsername;
+  sheet.pdfFields = sheet.pdfFields || {};
+  sheet.pdfFields.character_name = currentUsername;
+  state.playerSheets.unshift(sheet);
+  save();
 }
 
 function addPlayerSheet() {
   if (!requireUsername()) return;
-  state.playerSheets.unshift(makeEmptySheet());
+  const sheet = makeEmptySheet();
+  sheet.player = currentUsername;
+  if (currentUsername) {
+    sheet.name = currentUsername;
+    sheet.pdfFields = sheet.pdfFields || {};
+    sheet.pdfFields.character_name = currentUsername;
+  }
+  state.playerSheets.unshift(sheet);
   save();
   renderPlayerSheets();
   showTab('characters');
+}
+
+/* Sheets the current viewer is allowed to see + edit.
+   GM sees every sheet. Other users see only sheets they own. */
+function visibleSheetsForCurrentUser() {
+  if (!Array.isArray(state.playerSheets)) return [];
+  if (isGmUser()) return state.playerSheets.map((s, i) => ({ s, i }));
+  if (!currentUsername) return [];
+  return state.playerSheets
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s && s.player === currentUsername);
 }
 
 function renderPlayerSheets() {
@@ -973,14 +1072,51 @@ function renderPlayerSheets() {
   // Normalize any legacy sheets in place so they pick up the new fields.
   state.playerSheets = state.playerSheets.map(normalizeSheet);
 
-  if (!state.playerSheets.length) {
-    root.innerHTML = '<p class="muted">No character sheets yet. Click "+ Add Character Sheet" to start.</p>';
+  // Make sure the logged-in player has their own sheet auto-created.
+  ensureOwnSheet();
+
+  // Toggle the "+ Add Character Sheet" button so only the GM can add extras.
+  const addBtn = document.querySelector('[data-action="addPlayerSheet"]');
+  if (addBtn) addBtn.style.display = isGmUser() ? '' : 'none';
+
+  const visible = visibleSheetsForCurrentUser();
+
+  if (!currentUsername) {
+    root.innerHTML = '<p class="muted">Log in to see your character sheet.</p>';
+    return;
+  }
+  if (!visible.length) {
+    root.innerHTML = '<p class="muted">No character sheet yet.</p>';
     return;
   }
 
-  root.innerHTML = state.playerSheets.map((pc, idx) => renderSheetHtml(pc, idx)).join('');
+  // Fast path: if the visible sheets, owners, and order are unchanged from
+  // last render, leave the cards alone and just refresh the field values.
+  // This avoids re-rendering the PDF canvas on every Firebase sync update.
+  const signature = visible
+    .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}`)
+    .join(';');
+  if (root.dataset.sheetSig === signature && root.childElementCount === visible.length) {
+    if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields();
+    // Refresh meta text + extras (Class/DevilFruit/Notes) in place.
+    visible.forEach(({ s }) => {
+      const card = root.querySelector(`.player-card[data-sheet-id="${cssEsc(s.id)}"]`);
+      if (!card) return;
+      const meta = card.querySelector('.updated-meta');
+      if (meta) meta.textContent = sheetMetaText(s);
+      ['charClass','devilFruit','notes'].forEach((k) => {
+        const el = card.querySelector(`[data-pf="${k}"]`);
+        if (el && el !== document.activeElement && el.value !== (s[k] || '')) el.value = s[k] || '';
+      });
+    });
+    return;
+  }
 
-  $$('.player-card', root).forEach(card => {
+  // Rebuild path: the visible set changed (different sheet, new sheet, owner swap).
+  root.dataset.sheetSig = signature;
+  root.innerHTML = visible.map(({ s, i }) => renderSheetHtml(s, i)).join('');
+
+  $$('.player-card', root).forEach((card) => {
     const idx = Number(card.dataset.pidx);
     const sheet = state.playerSheets[idx];
     if (!sheet) return;
@@ -988,219 +1124,44 @@ function renderPlayerSheets() {
   });
 }
 
+/* Escape a string for use inside a CSS attribute selector. */
+function cssEsc(v) {
+  return String(v ?? '').replace(/["\\]/g, '\\$&');
+}
+
+/* Card shell: header actions, embedded-PDF mount point, supplemental fields. */
 function renderSheetHtml(pc, idx) {
-  const sec = sectionHp(pc.maxHp);
-  const totalDmg = BODY_PARTS.reduce((sum, p) => sum + (Number(pc.body?.[p.key]?.damage) || 0), 0);
-
-  // --- helpers ------------------------------------------------
-  const styleAt = (l, t, w, h = 2.4) =>
-    `left:${l}%; top:${t}%; width:${w}%; height:${h}%;`;
-  const ovTxt = (pf, val, l, t, w, h, ph = '') =>
-    `<input type="text" class="ov-input" data-pf="${pf}" value="${esc(val ?? '')}" placeholder="${esc(ph)}" style="${styleAt(l,t,w,h)}" />`;
-  const ovNum = (pf, val, l, t, w, h, opts = {}) => {
-    const min = opts.min !== undefined ? ` min="${opts.min}"` : '';
-    const step = opts.step !== undefined ? ` step="${opts.step}"` : '';
-    return `<input type="number" class="ov-input ov-num" data-pf="${pf}" value="${Number(val) || 0}"${min}${step} style="${styleAt(l,t,w,h)}" />`;
-  };
-  const ovMod = (key, l, t, w = 5.2, h = 2.4) => {
-    const m = fmtMod(statMod(pc.stats?.[key]));
-    return `<span class="ov-mod" data-mod-for="${key}" style="${styleAt(l,t,w,h)}">${m}</span>`;
-  };
-
-  /* ========== WANTED sheet overlay positions (percentages of image) ========== */
-  // Identity rows (left card)
-  const identityOverlay = [
-    ovTxt('name',    pc.name,    13.5, 25.8, 15.0, 2.4),
-    ovTxt('epithet', pc.epithet, 22.0, 28.9, 7.0,  2.4, 'e.g. Straw Hat'),
-    ovTxt('role',    pc.role,    17.0, 32.0, 12.5, 2.4),
-    ovTxt('age',     pc.age,     10.5, 35.2, 18.0, 2.4),
-    ovTxt('home',    pc.home,    23.7, 38.3, 5.5,  2.4),
-    ovTxt('player',  pc.player,   4.8, 41.6, 25.0, 2.4, 'Player username'),
-  ].join('');
-
-  // Inventory rows (7 visible)
-  const invRowsHtml = [];
-  for (let i = 0; i < 7; i++) {
-    const row = pc.inventory[i] || { item: '', qty: 0, weight: '' };
-    const top = 30.0 + i * 2.95;
-    invRowsHtml.push(ovTxt(`inv:item:${i}`,   row.item,   57.0, top, 17.5, 2.5));
-    invRowsHtml.push(ovNum(`inv:qty:${i}`,    row.qty,    76.0, top,  8.5, 2.5, { min: 0 }));
-    invRowsHtml.push(ovTxt(`inv:weight:${i}`, row.weight, 85.5, top, 10.5, 2.5));
-  }
-  const inventoryOverlay = invRowsHtml.join('');
-
-  // Stats — score & mod
-  const STAT_ROWS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
-  const statsOverlay = STAT_ROWS.map((k, i) => {
-    const top = 60.4 + i * 3.25;
-    return (
-      ovNum(`stat:${k}`, pc.stats?.[k], 21.5, top, 5.0, 2.4, { min: 0 }) +
-      ovMod(k, 28.0, top, 5.0, 2.4)
-    );
-  }).join('');
-  // AC / Initiative / Speed
-  const combatOverlay = [
-    ovNum('ac',         pc.ac,         21.5, 81.5, 6.0, 2.4),
-    ovNum('initiative', pc.initiative, 21.5, 84.5, 6.0, 2.4),
-    ovNum('speed',      pc.speed,      21.5, 87.5, 6.0, 2.4),
-  ].join('');
-
-  // Signature moves (4 stacked on right side)
-  const movesOverlay = pc.moves.slice(0, 4).map((m, i) => {
-    const blockTop = 54.6 + i * 9.6;
-    return (
-      ovTxt(`move:name:${i}`, m.name, 40.5, blockTop + 1.0, 51.0, 2.4) +
-      ovTxt(`move:desc:${i}`, m.desc, 46.5, blockTop + 4.0, 45.0, 2.4)
-    );
-  }).join('');
-
-  // Flashback circles (3) — overlaid as click targets above HEALTH box
-  const flashOverlay = [0, 1, 2].map(i => {
-    const left = 8.5 + i * 6.8;
-    return `<button type="button" class="flash-circle ${i < pc.flashback ? 'filled' : ''}" data-pa="flash" data-i="${i}" style="${styleAt(left, 88.6, 4.0, 3.0)}" title="Flashback charge ${i + 1}"></button>`;
-  }).join('');
-
-  // Bottom row (Health / Scars / Ransom)
-  const healthOverlay = [
-    ovNum('maxHp',  pc.maxHp,  13.0, 93.0, 14.5, 2.4, { min: 1 }),
-    ovNum('hp',     pc.hp,     17.0, 95.5, 10.5, 2.4, { min: 0 }),
-    ovNum('tempHp', pc.tempHp, 13.0, 97.8, 14.5, 2.4, { min: 0 }),
-  ].join('');
-  const scarsOverlay = [
-    ovTxt('scars:physical',   pc.scars.physical,   47.5, 93.0, 18.0, 2.4),
-    ovTxt('scars:emotional',  pc.scars.emotional,  47.5, 95.5, 18.0, 2.4),
-    ovTxt('scars:reputation', pc.scars.reputation, 47.5, 97.8, 18.0, 2.4),
-  ].join('');
-  const ransomOverlay = [
-    ovTxt('ransom:piece',     pc.ransom.piece,     73.5, 93.0, 20.0, 2.4),
-    ovTxt('ransom:curseName', pc.ransom.curseName, 73.5, 95.5, 20.0, 2.4),
-    ovNum('ransom:curseDC',   pc.ransom.curseDC,   75.5, 97.8, 7.0,  2.4, { min: 0 }),
-  ].join('');
-
-  // Bounty banner (very bottom)
-  const bountyOverlay = ovNum('bounty', pc.bounty, 58.0, 99.4, 30.0, 2.6, { min: 0, step: 100 });
-
-  // Portrait overlay (inside oval)
-  const portraitOverlay = `
-    <div class="ov-portrait" style="${styleAt(34.0, 17.5, 21.0, 26.0)}">
-      ${pc.portrait
-        ? `<img src="${esc(pc.portrait)}" alt="portrait" />`
-        : `<span class="muted">click to add portrait</span>`}
-      <input type="file" accept="image/*" class="hidden" data-pa="portrait-file" aria-label="Portrait file" title="Portrait file" />
-      <button type="button" class="ov-portrait-btn" data-pa="portrait-upload" title="Upload portrait"></button>
-      ${pc.portrait ? `<button type="button" class="ov-portrait-clear danger" data-pa="portrait-clear" title="Clear portrait">×</button>` : ''}
-    </div>
-  `;
-
-  /* ========== HP TRACKER overlay positions (percentages of image) ========== */
-  // Top stat boxes (4 across) and death saves
-  const chtTopOverlay = [
-    ovNum('maxHp', pc.maxHp, 7.0,  19.0, 10.0, 4.0, { min: 1 }),
-    ovNum('hp',    pc.hp,    31.0, 19.0, 10.0, 4.0, { min: 0 }),
-    `<span class="ov-readout" data-cht="totalDmg" style="${styleAt(55.0, 19.0, 10.0, 4.0)}">${totalDmg}</span>`,
-    `<span class="ov-readout" data-cht="sectionHp" style="${styleAt(79.0, 19.0, 10.0, 4.0)}">${sec}</span>`,
-  ].join('');
-
-  // Death save checkboxes (rough positions — adjust if needed)
-  const dsBoxes = ['success', 'fail'].map((kind, ki) => {
-    const top = 27.0 + ki * 3.5;
-    return [0, 1, 2].map(i => {
-      const left = 64.0 + i * 4.5;
-      return `<label class="ov-check" style="${styleAt(left, top, 2.4, 2.4)}"><input type="checkbox" data-pf="ds:${kind}:${i}" ${pc.deathSaves[kind][i] ? 'checked' : ''} /><span></span></label>`;
-    }).join('');
-  }).join('');
-
-  // 6 body parts overlaid around silhouette
-  // Left column (rows 1-3): Head, Torso, R Arm at left ~3-22%
-  // Right column (rows 4-6): L Arm, R Leg, L Leg at right ~78-97%
-  const partPositions = {
-    head:  { col: 'left',  top: 38.0 },
-    torso: { col: 'left',  top: 53.5 },
-    rArm:  { col: 'left',  top: 69.0 },
-    lArm:  { col: 'right', top: 38.0 },
-    rLeg:  { col: 'right', top: 53.5 },
-    lLeg:  { col: 'right', top: 69.0 },
-  };
-  const bodyOverlayHtml = BODY_PARTS.map(p => {
-    const pos = partPositions[p.key];
-    const left = pos.col === 'left' ? 3.0 : 76.0;
-    const w = 21.0;
-    const part = pc.body[p.key];
-    const states = DAMAGE_THRESHOLDS.map(t => `
-      <label class="ov-state-box">
-        <input type="checkbox" data-pf="body:state:${p.key}:${t}" ${part.states[t] ? 'checked' : ''} />
-        <span>${t}%</span>
-      </label>
-    `).join('');
-    return `
-      <div class="ov-bodypart" style="${styleAt(left, pos.top, w, 13.5)}">
-        <div class="ov-bp-row"><span class="ov-bp-label">${esc(p.label)}</span></div>
-        <div class="ov-bp-row"><span>Section HP</span><b class="ov-bp-val" data-cht-section>${sec}</b></div>
-        <div class="ov-bp-row"><span>Damage</span>
-          <input type="number" class="ov-bp-input" data-pf="body:damage:${p.key}" min="0" value="${Number(part.damage) || 0}" />
-        </div>
-        <div class="ov-bp-states">${states}</div>
-      </div>
-    `;
-  }).join('');
-
+  const owner = pc.player || '—';
+  const isMine = pc.player === currentUsername;
+  const canEdit = isMine || isGmUser();
   return `
-  <article class="player-card sheet-image-card" data-pidx="${idx}">
+  <article class="player-card pdf-sheet-card" data-pidx="${idx}" data-sheet-id="${esc(pc.id)}">
     <div class="sheet-actions-top btn-row">
-      <button type="button" data-pa="portrait-upload">${pc.portrait ? 'Change Portrait' : 'Upload Portrait'}</button>
-      ${pc.portrait ? '<button type="button" class="danger" data-pa="portrait-clear">Clear Portrait</button>' : ''}
-      <button type="button" data-pa="hpdelta" data-delta="-5">-5 HP</button>
-      <button type="button" data-pa="hpdelta" data-delta="-1">-1 HP</button>
-      <button type="button" data-pa="hpdelta" data-delta="1">+1 HP</button>
-      <button type="button" data-pa="hpdelta" data-delta="5">+5 HP</button>
-      <button type="button" class="danger" data-pa="delete">Delete Sheet</button>
+      <span class="sheet-owner">Owner: <b>${esc(owner)}</b>${isGmUser() && !isMine ? ' <span class="muted">(viewing as GM)</span>' : ''}</span>
+      <button type="button" data-pa="download-pdf" class="gold">📄 Download Filled PDF</button>
+      ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
     </div>
-
-    <!-- ========== WANTED CHARACTER SHEET (image overlay) ========== -->
-    <div class="sheet-image-wrap wanted-wrap">
-      <img class="sheet-image" src="assets/Charicter sheet.png" alt="Wanted character sheet" draggable="false" />
-      ${identityOverlay}
-      ${portraitOverlay}
-      ${inventoryOverlay}
-      ${statsOverlay}
-      ${combatOverlay}
-      ${movesOverlay}
-      ${flashOverlay}
-      ${healthOverlay}
-      ${scarsOverlay}
-      ${ransomOverlay}
-      ${bountyOverlay}
+    <div class="pdf-sheet-wrap${canEdit ? '' : ' readonly'}" data-pdf-mount="pending">
+      <div class="pdf-sheet-status muted">Loading fillable character sheet…</div>
+      <canvas class="pdf-sheet-canvas"></canvas>
+      <div class="pdf-sheet-widgets"></div>
     </div>
-
-    <!-- ========== CINEMATIC HEALTH TRACKER (image overlay) ========== -->
-    <div class="sheet-image-wrap cht-wrap">
-      <img class="sheet-image" src="assets/Charicter HP.png" alt="Cinematic health tracker" draggable="false" />
-      ${chtTopOverlay}
-      ${dsBoxes}
-      ${bodyOverlayHtml}
-    </div>
-
-    <!-- Supplemental fields not on the printable sheet -->
     <section class="sheet-extras parchment inset">
       <div class="grid two">
-        <label>Level<input type="number" data-pf="level" min="1" value="${Math.max(1, Number(pc.level) || 1)}" /></label>
         <label>Class<input type="text" data-pf="charClass" value="${esc(pc.charClass)}" placeholder="e.g. Swordsman" /></label>
         <label>Devil Fruit<input type="text" data-pf="devilFruit" value="${esc(pc.devilFruit)}" placeholder="e.g. Gomu Gomu no Mi" /></label>
-        <label class="full">Health Notes / Lingering Injuries<textarea data-pf="healthNotes" rows="3">${esc(pc.healthNotes)}</textarea></label>
         <label class="full">General Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
       </div>
-      <div class="btn-row">
-        <button type="button" data-pa="inv-add">+ Add Item to Inventory</button>
-      </div>
     </section>
-
     <div class="muted updated-meta">${sheetMetaText(pc)}</div>
   </article>`;
 }
 
 function attachSheetHandlers(card, sheet, idx) {
-  const metaEl = $('.updated-meta', card);
+  const metaEl = card.querySelector('.updated-meta');
   const refreshMeta = () => { if (metaEl) metaEl.textContent = sheetMetaText(sheet); };
+  const isMine = sheet.player === currentUsername;
+  const canEdit = isMine || isGmUser();
 
   const persist = () => {
     stampSheetEdit(sheet);
@@ -1208,188 +1169,71 @@ function attachSheetHandlers(card, sheet, idx) {
     refreshMeta();
   };
 
-  const totalDamage = () =>
-    BODY_PARTS.reduce((sum, p) => sum + (Number(sheet.body?.[p.key]?.damage) || 0), 0);
-
-  const refreshDerived = () => {
-    // stat mods (overlay spans on Wanted sheet)
-    STAT_DEFS.forEach(s => {
-      const modEl = card.querySelector(`[data-mod-for="${s.key}"]`);
-      if (modEl) modEl.textContent = fmtMod(statMod(sheet.stats[s.key]));
-    });
-    // CHT readouts (total damage + section HP)
-    const totalEl = card.querySelector('[data-cht="totalDmg"]');
-    if (totalEl) totalEl.textContent = totalDamage();
-    const secEl = card.querySelector('[data-cht="sectionHp"]');
-    if (secEl) secEl.textContent = sectionHp(sheet.maxHp);
-    // per body-part section HP value
-    card.querySelectorAll('[data-cht-section]').forEach(el => {
-      el.textContent = sectionHp(sheet.maxHp);
-    });
-  };
-
-  // ---------- field bindings (data-pf="key" or "ns:sub" etc.) ----------
-  $$('[data-pf]', card).forEach(el => {
+  // --- supplemental (non-PDF) fields ---
+  $$('[data-pf]', card).forEach((el) => {
+    if (!canEdit) { el.setAttribute('disabled', 'disabled'); return; }
     const handler = () => {
       if (!requireUsername()) return;
-      const path = el.dataset.pf.split(':');
-      const ns = path[0];
-      let value;
-      if (el.type === 'checkbox') value = el.checked;
-      else if (el.type === 'number') value = Number(el.value) || 0;
-      else value = el.value;
-
-      switch (ns) {
-        case 'stat': {
-          const k = path[1];
-          sheet.stats[k] = Math.max(0, value);
-          refreshDerived();
-          persist();
-          return;
-        }
-        case 'inv': {
-          const field = path[1];
-          const ri = Number(path[2]);
-          if (!sheet.inventory[ri]) return;
-          if (field === 'qty') sheet.inventory[ri].qty = Math.max(0, value);
-          else sheet.inventory[ri][field] = value;
-          persist();
-          return;
-        }
-        case 'move': {
-          const field = path[1];
-          const mi = Number(path[2]);
-          if (!sheet.moves[mi]) sheet.moves[mi] = { name: '', desc: '' };
-          sheet.moves[mi][field] = value;
-          persist();
-          return;
-        }
-        case 'scars':
-          sheet.scars[path[1]] = value;
-          persist();
-          return;
-        case 'ransom':
-          sheet.ransom[path[1]] = path[1] === 'curseDC' ? Math.max(0, value) : value;
-          persist();
-          return;
-        case 'ds': {
-          const kind = path[1];
-          const i = Number(path[2]);
-          sheet.deathSaves[kind][i] = Boolean(value);
-          persist();
-          return;
-        }
-        case 'body': {
-          const field = path[1];
-          const pk = path[2];
-          if (field === 'damage') sheet.body[pk].damage = Math.max(0, value);
-          else if (field === 'state') sheet.body[pk].states[path[3]] = Boolean(value);
-          refreshDerived();
-          persist();
-          return;
-        }
-        default: {
-          const key = ns;
-          if (key === 'maxHp') {
-            sheet.maxHp = Math.max(1, value);
-            if (sheet.hp > sheet.maxHp) {
-              sheet.hp = sheet.maxHp;
-              const hpInput = card.querySelector('[data-pf="hp"]');
-              if (hpInput) hpInput.value = sheet.hp;
-            }
-            refreshDerived();
-            persist();
-            return;
-          }
-          if (key === 'hp')      value = clamp(value, 0, Math.max(1, Number(sheet.maxHp) || 1));
-          if (key === 'tempHp')  value = Math.max(0, value);
-          if (key === 'bounty')  value = Math.max(0, value);
-          if (key === 'level')   value = Math.max(1, value);
-          if (key === 'ac' || key === 'speed') value = Math.max(0, value);
-          sheet[key] = value;
-          if (key === 'hp') refreshDerived();
-          persist();
-        }
-      }
+      sheet[el.dataset.pf] = el.value;
+      persist();
     };
     el.addEventListener('input', handler);
-    if (el.type === 'checkbox') el.addEventListener('change', handler);
   });
 
-  // ---------- action buttons (these can re-render safely; no text focus) ----------
-  $$('[data-pa]', card).forEach(btn => {
-    const act = btn.dataset.pa;
+  // --- top action buttons ---
+  $$('[data-pa]', card).forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (act !== 'portrait-file' && !requireUsername()) return;
-      switch (act) {
-        case 'hpdelta': {
-          const delta = Number(btn.dataset.delta) || 0;
-          sheet.hp = clamp((Number(sheet.hp) || 0) + delta, 0, Math.max(1, Number(sheet.maxHp) || 1));
-          const hpInput = card.querySelector('[data-pf="hp"]');
-          if (hpInput) hpInput.value = sheet.hp;
-          refreshDerived();
-          persist();
-          break;
-        }
-        case 'flash': {
-          const i = Number(btn.dataset.i);
-          // Click filled circle to clear from there; click empty to fill up to it.
-          sheet.flashback = (sheet.flashback === i + 1) ? i : i + 1;
-          card.querySelectorAll('.flash-circle').forEach((el, j) => {
-            el.classList.toggle('filled', j < sheet.flashback);
+      const act = btn.dataset.pa;
+      if (act === 'download-pdf') {
+        if (window.pdfSheet && typeof window.pdfSheet.download === 'function') {
+          window.pdfSheet.download(sheet).catch((e) => {
+            console.error('[pdf-sheet] download failed', e);
+            alert('Could not download filled PDF: ' + (e?.message || e));
           });
-          persist();
-          break;
         }
-        case 'inv-add':
-          sheet.inventory.push({ item: '', qty: 1, weight: '' });
-          save();
-          renderPlayerSheets();
-          break;
-        case 'inv-del': {
-          const ri = Number(btn.dataset.row);
-          sheet.inventory.splice(ri, 1);
-          save();
-          renderPlayerSheets();
-          break;
-        }
-        case 'portrait-upload': {
-          const fileInput = card.querySelector('[data-pa="portrait-file"]');
-          if (fileInput) fileInput.click();
-          break;
-        }
-        case 'portrait-clear':
-          sheet.portrait = '';
-          save();
-          renderPlayerSheets();
-          break;
-        case 'delete':
-          if (!confirm(`Delete ${sheet.name || 'this'} character sheet?`)) return;
-          state.playerSheets.splice(idx, 1);
-          save();
-          renderPlayerSheets();
-          break;
+        return;
+      }
+      if (!canEdit) return;
+      if (act === 'delete') {
+        if (!confirm(`Delete ${sheet.name || sheet.player || 'this'} character sheet?`)) return;
+        state.playerSheets.splice(idx, 1);
+        save();
+        renderPlayerSheets();
       }
     });
   });
 
-  // Portrait file input -> data URL
-  const fileEl = $('[data-pa="portrait-file"]', card);
-  if (fileEl) {
-    fileEl.addEventListener('change', () => {
-      if (!requireUsername()) return;
-      const f = fileEl.files && fileEl.files[0];
-      if (!f) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        sheet.portrait = String(reader.result || '');
-        save();
-        renderPlayerSheets();
-      };
-      reader.readAsDataURL(f);
+  // --- mount the embedded fillable PDF form ---
+  if (window.pdfSheet && typeof window.pdfSheet.mount === 'function') {
+    window.pdfSheet.mount(card, sheet, {
+      canEdit,
+      onChange: (fieldName, value) => {
+        if (!requireUsername()) return;
+        sheet.pdfFields = sheet.pdfFields || {};
+        if (value === '' || value === false || value === null || value === undefined) {
+          delete sheet.pdfFields[fieldName];
+        } else {
+          sheet.pdfFields[fieldName] = value;
+        }
+        // Keep a few mirrored convenience fields in sync so display names update.
+        if (fieldName === 'character_name') sheet.name = String(value || '');
+        if (fieldName === 'bounty')         sheet.bounty = Number(value) || 0;
+        persist();
+      },
     });
+  } else {
+    const wrap = card.querySelector('.pdf-sheet-wrap');
+    if (wrap) wrap.querySelector('.pdf-sheet-status').textContent =
+      'PDF renderer not loaded. Check your network connection and reload.';
   }
 }
+
+/* Called by sync.js / app.js after applyRemoteState — gives the PDF module a
+   chance to refresh widget values without rebuilding the canvas. */
+window.refreshPdfSheetFields = function () {
+  if (!window.pdfSheet || typeof window.pdfSheet.refreshAll !== 'function') return;
+  window.pdfSheet.refreshAll();
+};
 
 /* ===========================================================
    SEA TRAVEL — Routes
