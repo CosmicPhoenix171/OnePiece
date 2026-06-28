@@ -325,6 +325,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   border-radius: 8px;
   overflow: hidden;
   box-shadow: var(--shadow);
+  container-type: inline-size;
 }
 .sheet-image {
   display: block;
@@ -353,7 +354,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   border-bottom: 1px dashed rgba(122, 31, 31, 0.0);
   color: #2a1a0a;
   font-family: 'Georgia', 'Cambria', serif;
-  font-size: clamp(0.7rem, 1.2vw, 1rem);
+  font-size: 2.0cqw;
   line-height: 1;
   padding: 0 2px;
   margin: 0;
@@ -387,7 +388,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   font-family: 'Georgia', 'Cambria', serif;
   font-weight: bold;
   color: var(--blood);
-  font-size: clamp(0.7rem, 1.3vw, 1.05rem);
+  font-size: 2.2cqw;
   pointer-events: none;
 }
 
@@ -397,7 +398,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   font-family: 'Cinzel', 'Georgia', serif;
   font-weight: bold;
   color: var(--blood);
-  font-size: clamp(0.9rem, 2vw, 1.6rem);
+  font-size: 3.5cqw;
   pointer-events: none;
 }
 
@@ -477,7 +478,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   border: 1px solid var(--blood);
   border-radius: 4px;
   padding: 4px 6px;
-  font-size: clamp(0.6rem, 1vw, 0.85rem);
+  font-size: 1.5cqw;
   color: var(--ink);
   display: flex;
   flex-direction: column;
