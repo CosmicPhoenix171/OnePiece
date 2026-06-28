@@ -1104,12 +1104,34 @@ function isGmUser() {
     && currentUsername.trim().toLowerCase() === 'gm';
 }
 
+/* True when `sheet.player` matches the logged-in user. Compared
+   case-insensitively and trim-tolerant so re-logins ("Alice" vs "alice")
+   never lock the rightful owner out of editing or saving. */
+function isSheetOwner(sheet, username) {
+  const u = String(username != null ? username : currentUsername || '').trim().toLowerCase();
+  const p = String((sheet && sheet.player) || '').trim().toLowerCase();
+  return Boolean(u) && Boolean(p) && u === p;
+}
+
+/* True if the current viewer is allowed to edit `sheet` (owner or GM). */
+function canEditSheet(sheet) {
+  return isGmUser() || isSheetOwner(sheet);
+}
+
 /* Ensure the logged-in (non-GM) user has exactly one sheet of their own. */
 function ensureOwnSheet() {
   if (!currentUsername || isGmUser()) return;
   if (!Array.isArray(state.playerSheets)) state.playerSheets = [];
-  const owned = state.playerSheets.find((s) => s && s.player === currentUsername);
-  if (owned) return;
+  const owned = state.playerSheets.find((s) => isSheetOwner(s));
+  if (owned) {
+    // Heal legacy/casing drift so the live record matches the current login.
+    if (owned.player !== currentUsername) {
+      owned.player = currentUsername;
+      stampSheetEdit(owned);
+      save();
+    }
+    return;
+  }
   const sheet = makeEmptySheet();
   sheet.player = currentUsername;
   sheet.name = currentUsername;
@@ -1142,7 +1164,7 @@ function visibleSheetsForCurrentUser() {
   if (!currentUsername) return [];
   return state.playerSheets
     .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s && s.player === currentUsername);
+    .filter(({ s }) => isSheetOwner(s));
 }
 
 function renderPlayerSheets() {
@@ -1213,8 +1235,8 @@ function cssEsc(v) {
 /* Card shell: header actions, embedded-PDF mount point, supplemental fields. */
 function renderSheetHtml(pc, idx) {
   const owner = pc.player || '—';
-  const isMine = pc.player === currentUsername;
-  const canEdit = isMine || isGmUser();
+  const isMine = isSheetOwner(pc);
+  const canEdit = canEditSheet(pc);
   return `
   <article class="player-card pdf-sheet-card" data-pidx="${idx}" data-sheet-id="${esc(pc.id)}">
     <div class="sheet-actions-top btn-row">
@@ -1251,13 +1273,22 @@ function attachSheetHandlers(card, sheet, idx) {
     return state.playerSheets.find((s) => s && s.id === sheetId) || null;
   };
 
+  // Re-check edit permission against the LIVE sheet + current login every
+  // time, so the rightful owner is never blocked by a stale closure (e.g.
+  // they logged out and back in, or remote sync replaced the sheet object).
+  const canEditLive = () => {
+    const s = getSheet() || sheet;
+    return canEditSheet(s);
+  };
+
   const metaEl = card.querySelector('.updated-meta');
   const refreshMeta = () => {
     const s = getSheet();
     if (metaEl && s) metaEl.textContent = sheetMetaText(s);
   };
-  const isMine = sheet.player === currentUsername;
-  const canEdit = isMine || isGmUser();
+  // Initial values — used only for the first paint of disabled-state on
+  // supplemental fields. The live check above governs every actual edit.
+  const initialCanEdit = canEditSheet(sheet);
 
   const persist = () => {
     const s = getSheet();
@@ -1269,9 +1300,10 @@ function attachSheetHandlers(card, sheet, idx) {
 
   // --- supplemental (non-PDF) fields ---
   $$('[data-pf]', card).forEach((el) => {
-    if (!canEdit) { el.setAttribute('disabled', 'disabled'); return; }
+    if (!initialCanEdit) { el.setAttribute('disabled', 'disabled'); return; }
     const handler = () => {
       if (!requireUsername()) return;
+      if (!canEditLive()) return;
       const s = getSheet();
       if (!s) return;
       s[el.dataset.pf] = el.value;
@@ -1294,7 +1326,7 @@ function attachSheetHandlers(card, sheet, idx) {
         }
         return;
       }
-      if (!canEdit) return;
+      if (!canEditLive()) return;
       if (act === 'delete') {
         const s = getSheet();
         if (!s) return;
@@ -1312,9 +1344,10 @@ function attachSheetHandlers(card, sheet, idx) {
   // --- mount the embedded fillable PDF form ---
   if (window.pdfSheet && typeof window.pdfSheet.mount === 'function') {
     window.pdfSheet.mount(card, sheet, {
-      canEdit,
+      canEdit: initialCanEdit,
       onChange: (fieldName, value) => {
         if (!requireUsername()) return;
+        if (!canEditLive()) return;
         const s = getSheet();
         if (!s) return;
         s.pdfFields = s.pdfFields || {};
