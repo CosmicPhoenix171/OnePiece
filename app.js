@@ -986,207 +986,208 @@ function renderSheetHtml(pc, idx) {
   const sec = sectionHp(pc.maxHp);
   const totalDmg = BODY_PARTS.reduce((sum, p) => sum + (Number(pc.body?.[p.key]?.damage) || 0), 0);
 
-  const statsHtml = STAT_DEFS.map(s => {
-    const score = Number(pc.stats?.[s.key]) || 0;
-    return `
-      <div class="stat-row">
-        <div class="stat-name">${s.label}</div>
-        <label class="stat-cell"><span>Score</span><input type="number" data-pf="stat:${s.key}" value="${score}" /></label>
-        <div class="stat-cell mod"><span>Mod</span><b>${fmtMod(statMod(score))}</b></div>
-      </div>`;
+  // --- helpers ------------------------------------------------
+  const styleAt = (l, t, w, h = 2.4) =>
+    `left:${l}%; top:${t}%; width:${w}%; height:${h}%;`;
+  const ovTxt = (pf, val, l, t, w, h, ph = '') =>
+    `<input type="text" class="ov-input" data-pf="${pf}" value="${esc(val ?? '')}" placeholder="${esc(ph)}" style="${styleAt(l,t,w,h)}" />`;
+  const ovNum = (pf, val, l, t, w, h, opts = {}) => {
+    const min = opts.min !== undefined ? ` min="${opts.min}"` : '';
+    const step = opts.step !== undefined ? ` step="${opts.step}"` : '';
+    return `<input type="number" class="ov-input ov-num" data-pf="${pf}" value="${Number(val) || 0}"${min}${step} style="${styleAt(l,t,w,h)}" />`;
+  };
+  const ovMod = (key, l, t, w = 5.2, h = 2.4) => {
+    const m = fmtMod(statMod(pc.stats?.[key]));
+    return `<span class="ov-mod" data-mod-for="${key}" style="${styleAt(l,t,w,h)}">${m}</span>`;
+  };
+
+  /* ========== WANTED sheet overlay positions (percentages of image) ========== */
+  // Identity rows (left card)
+  const identityOverlay = [
+    ovTxt('name',    pc.name,    13.5, 25.8, 15.0, 2.4),
+    ovTxt('epithet', pc.epithet, 22.0, 28.9, 7.0,  2.4, 'e.g. Straw Hat'),
+    ovTxt('role',    pc.role,    17.0, 32.0, 12.5, 2.4),
+    ovTxt('age',     pc.age,     10.5, 35.2, 18.0, 2.4),
+    ovTxt('home',    pc.home,    23.7, 38.3, 5.5,  2.4),
+    ovTxt('player',  pc.player,   4.8, 41.6, 25.0, 2.4, 'Player username'),
+  ].join('');
+
+  // Inventory rows (7 visible)
+  const invRowsHtml = [];
+  for (let i = 0; i < 7; i++) {
+    const row = pc.inventory[i] || { item: '', qty: 0, weight: '' };
+    const top = 30.0 + i * 2.95;
+    invRowsHtml.push(ovTxt(`inv:item:${i}`,   row.item,   57.0, top, 17.5, 2.5));
+    invRowsHtml.push(ovNum(`inv:qty:${i}`,    row.qty,    76.0, top,  8.5, 2.5, { min: 0 }));
+    invRowsHtml.push(ovTxt(`inv:weight:${i}`, row.weight, 85.5, top, 10.5, 2.5));
+  }
+  const inventoryOverlay = invRowsHtml.join('');
+
+  // Stats — score & mod
+  const STAT_ROWS = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const statsOverlay = STAT_ROWS.map((k, i) => {
+    const top = 60.4 + i * 3.25;
+    return (
+      ovNum(`stat:${k}`, pc.stats?.[k], 21.5, top, 5.0, 2.4, { min: 0 }) +
+      ovMod(k, 28.0, top, 5.0, 2.4)
+    );
+  }).join('');
+  // AC / Initiative / Speed
+  const combatOverlay = [
+    ovNum('ac',         pc.ac,         21.5, 81.5, 6.0, 2.4),
+    ovNum('initiative', pc.initiative, 21.5, 84.5, 6.0, 2.4),
+    ovNum('speed',      pc.speed,      21.5, 87.5, 6.0, 2.4),
+  ].join('');
+
+  // Signature moves (4 stacked on right side)
+  const movesOverlay = pc.moves.slice(0, 4).map((m, i) => {
+    const blockTop = 54.6 + i * 9.6;
+    return (
+      ovTxt(`move:name:${i}`, m.name, 40.5, blockTop + 1.0, 51.0, 2.4) +
+      ovTxt(`move:desc:${i}`, m.desc, 46.5, blockTop + 4.0, 45.0, 2.4)
+    );
   }).join('');
 
-  const invRows = (pc.inventory.length ? pc.inventory : []).map((row, ri) => `
-    <tr data-inv-row="${ri}">
-      <td><input type="text" data-pf="inv:item:${ri}"   value="${esc(row.item)}"   placeholder="e.g. Cutlass" /></td>
-      <td><input type="number" data-pf="inv:qty:${ri}"  value="${Number(row.qty) || 0}" min="0" /></td>
-      <td><input type="text" data-pf="inv:weight:${ri}" value="${esc(row.weight)}" placeholder="—" /></td>
-      <td><button type="button" class="danger small" data-pa="inv-del" data-row="${ri}">×</button></td>
-    </tr>`).join('');
+  // Flashback circles (3) — overlaid as click targets above HEALTH box
+  const flashOverlay = [0, 1, 2].map(i => {
+    const left = 8.5 + i * 6.8;
+    return `<button type="button" class="flash-circle ${i < pc.flashback ? 'filled' : ''}" data-pa="flash" data-i="${i}" style="${styleAt(left, 88.6, 4.0, 3.0)}" title="Flashback charge ${i + 1}"></button>`;
+  }).join('');
 
-  const movesHtml = pc.moves.map((m, mi) => `
-    <div class="move-block">
-      <div class="move-head">SIGNATURE MOVE ${mi + 1}</div>
-      <label>Name<input type="text" data-pf="move:name:${mi}" value="${esc(m.name)}" /></label>
-      <label>What It Does<input type="text" data-pf="move:desc:${mi}" value="${esc(m.desc)}" /></label>
-    </div>`).join('');
+  // Bottom row (Health / Scars / Ransom)
+  const healthOverlay = [
+    ovNum('maxHp',  pc.maxHp,  13.0, 93.0, 14.5, 2.4, { min: 1 }),
+    ovNum('hp',     pc.hp,     17.0, 95.5, 10.5, 2.4, { min: 0 }),
+    ovNum('tempHp', pc.tempHp, 13.0, 97.8, 14.5, 2.4, { min: 0 }),
+  ].join('');
+  const scarsOverlay = [
+    ovTxt('scars:physical',   pc.scars.physical,   47.5, 93.0, 18.0, 2.4),
+    ovTxt('scars:emotional',  pc.scars.emotional,  47.5, 95.5, 18.0, 2.4),
+    ovTxt('scars:reputation', pc.scars.reputation, 47.5, 97.8, 18.0, 2.4),
+  ].join('');
+  const ransomOverlay = [
+    ovTxt('ransom:piece',     pc.ransom.piece,     73.5, 93.0, 20.0, 2.4),
+    ovTxt('ransom:curseName', pc.ransom.curseName, 73.5, 95.5, 20.0, 2.4),
+    ovNum('ransom:curseDC',   pc.ransom.curseDC,   75.5, 97.8, 7.0,  2.4, { min: 0 }),
+  ].join('');
 
-  const flashHtml = [0,1,2].map(i => `
-    <span class="flash-circle ${i < pc.flashback ? 'filled' : ''}" data-pa="flash" data-i="${i}" title="Flashback charge ${i+1}"></span>
-  `).join('');
+  // Bounty banner (very bottom)
+  const bountyOverlay = ovNum('bounty', pc.bounty, 58.0, 99.4, 30.0, 2.6, { min: 0, step: 100 });
 
-  const deathSaveHtml = ['success','fail'].map(kind => `
-    <div class="ds-row ${kind}">
-      <span>${kind === 'success' ? 'Success' : 'Fail'}</span>
-      ${[0,1,2].map(i => `
-        <label class="ds-box"><input type="checkbox" data-pf="ds:${kind}:${i}" ${pc.deathSaves[kind][i] ? 'checked' : ''} /><span></span></label>
-      `).join('')}
-    </div>`).join('');
+  // Portrait overlay (inside oval)
+  const portraitOverlay = `
+    <div class="ov-portrait" style="${styleAt(34.0, 17.5, 21.0, 26.0)}">
+      ${pc.portrait
+        ? `<img src="${esc(pc.portrait)}" alt="portrait" />`
+        : `<span class="muted">click to add portrait</span>`}
+      <input type="file" accept="image/*" class="hidden" data-pa="portrait-file" aria-label="Portrait file" title="Portrait file" />
+      <button type="button" class="ov-portrait-btn" data-pa="portrait-upload" title="Upload portrait"></button>
+      ${pc.portrait ? `<button type="button" class="ov-portrait-clear danger" data-pa="portrait-clear" title="Clear portrait">×</button>` : ''}
+    </div>
+  `;
 
-  const bodyPartHtml = (p) => {
-    const part = pc.body[p.key];
-    return `
-      <div class="body-part" data-part="${p.key}">
-        <div class="body-part-head"><span class="num">${p.num}</span>${p.label}</div>
-        <label>Section HP<input type="text" class="cht-section-hp" value="${sec}" readonly tabindex="-1" /></label>
-        <label>Damage Taken<input type="number" data-pf="body:damage:${p.key}" value="${Number(part.damage) || 0}" min="0" /></label>
-        <div class="state-row">
-          ${DAMAGE_THRESHOLDS.map(t => `
-            <label class="state-box">
-              <input type="checkbox" data-pf="body:state:${p.key}:${t}" ${part.states[t] ? 'checked' : ''} />
-              <span>${t}%</span>
-            </label>`).join('')}
-        </div>
-      </div>`;
+  /* ========== HP TRACKER overlay positions (percentages of image) ========== */
+  // Top stat boxes (4 across) and death saves
+  const chtTopOverlay = [
+    ovNum('maxHp', pc.maxHp, 7.0,  19.0, 10.0, 4.0, { min: 1 }),
+    ovNum('hp',    pc.hp,    31.0, 19.0, 10.0, 4.0, { min: 0 }),
+    `<span class="ov-readout" data-cht="totalDmg" style="${styleAt(55.0, 19.0, 10.0, 4.0)}">${totalDmg}</span>`,
+    `<span class="ov-readout" data-cht="sectionHp" style="${styleAt(79.0, 19.0, 10.0, 4.0)}">${sec}</span>`,
+  ].join('');
+
+  // Death save checkboxes (rough positions — adjust if needed)
+  const dsBoxes = ['success', 'fail'].map((kind, ki) => {
+    const top = 27.0 + ki * 3.5;
+    return [0, 1, 2].map(i => {
+      const left = 64.0 + i * 4.5;
+      return `<label class="ov-check" style="${styleAt(left, top, 2.4, 2.4)}"><input type="checkbox" data-pf="ds:${kind}:${i}" ${pc.deathSaves[kind][i] ? 'checked' : ''} /><span></span></label>`;
+    }).join('');
+  }).join('');
+
+  // 6 body parts overlaid around silhouette
+  // Left column (rows 1-3): Head, Torso, R Arm at left ~3-22%
+  // Right column (rows 4-6): L Arm, R Leg, L Leg at right ~78-97%
+  const partPositions = {
+    head:  { col: 'left',  top: 38.0 },
+    torso: { col: 'left',  top: 53.5 },
+    rArm:  { col: 'left',  top: 69.0 },
+    lArm:  { col: 'right', top: 38.0 },
+    rLeg:  { col: 'right', top: 53.5 },
+    lLeg:  { col: 'right', top: 69.0 },
   };
-  const leftBodyHtml  = BODY_PARTS.slice(0, 3).map(bodyPartHtml).join('');
-  const rightBodyHtml = BODY_PARTS.slice(3, 6).map(bodyPartHtml).join('');
+  const bodyOverlayHtml = BODY_PARTS.map(p => {
+    const pos = partPositions[p.key];
+    const left = pos.col === 'left' ? 3.0 : 76.0;
+    const w = 21.0;
+    const part = pc.body[p.key];
+    const states = DAMAGE_THRESHOLDS.map(t => `
+      <label class="ov-state-box">
+        <input type="checkbox" data-pf="body:state:${p.key}:${t}" ${part.states[t] ? 'checked' : ''} />
+        <span>${t}%</span>
+      </label>
+    `).join('');
+    return `
+      <div class="ov-bodypart" style="${styleAt(left, pos.top, w, 13.5)}">
+        <div class="ov-bp-row"><span class="ov-bp-label">${esc(p.label)}</span></div>
+        <div class="ov-bp-row"><span>Section HP</span><b class="ov-bp-val" data-cht-section>${sec}</b></div>
+        <div class="ov-bp-row"><span>Damage</span>
+          <input type="number" class="ov-bp-input" data-pf="body:damage:${p.key}" min="0" value="${Number(part.damage) || 0}" />
+        </div>
+        <div class="ov-bp-states">${states}</div>
+      </div>
+    `;
+  }).join('');
 
   return `
-  <article class="player-card sheet-card" data-pidx="${idx}">
-    <header class="sheet-banner">
-      <div class="sheet-banner-side">
-        <span class="sheet-skull">☠</span>
-      </div>
-      <h2 class="sheet-banner-title">WANTED</h2>
-      <div class="sheet-banner-side right">
-        <span class="sheet-compass">✦</span>
-      </div>
-    </header>
-
-    <div class="sheet-top">
-      <section class="sheet-identity">
-        <label>Name<input type="text" data-pf="name" value="${esc(pc.name)}" /></label>
-        <label>Epithet / Title<input type="text" data-pf="epithet" value="${esc(pc.epithet)}" placeholder="e.g. Straw Hat" /></label>
-        <label>Crew Role<input type="text" data-pf="role" value="${esc(pc.role)}" placeholder="Captain, Navigator..." /></label>
-        <label>Age<input type="text" data-pf="age" value="${esc(pc.age)}" /></label>
-        <label>Home Sea / Island<input type="text" data-pf="home" value="${esc(pc.home)}" /></label>
-        <label>Player Username<input type="text" data-pf="player" value="${esc(pc.player)}" /></label>
-      </section>
-
-      <section class="sheet-portrait">
-        <div class="portrait-frame" style="${pc.portrait ? `background-image:url('${esc(pc.portrait)}')` : ''}">
-          ${pc.portrait ? '' : '<span class="portrait-hint">Portrait</span>'}
-        </div>
-        <div class="btn-row">
-          <input type="file" accept="image/*" class="hidden" data-pa="portrait-file" aria-label="Portrait file" title="Portrait file" />
-          <button type="button" data-pa="portrait-upload">Upload Portrait</button>
-          ${pc.portrait ? '<button type="button" class="danger" data-pa="portrait-clear">Clear</button>' : ''}
-        </div>
-      </section>
-
-      <section class="sheet-inventory">
-        <h3>Inventory / Equipment</h3>
-        <table class="inv-table">
-          <thead><tr><th>Item Name</th><th>Qty</th><th>Weight / Value</th><th></th></tr></thead>
-          <tbody>${invRows || '<tr><td colspan="4" class="muted">No items yet.</td></tr>'}</tbody>
-        </table>
-        <button type="button" data-pa="inv-add">+ Add Item</button>
-      </section>
-    </div>
-
-    <div class="sheet-mid">
-      <section class="sheet-stats">
-        <h3>Stats</h3>
-        <div class="stat-grid">${statsHtml}</div>
-        <div class="combat-grid">
-          <label>Armor Class<input type="number" data-pf="ac" value="${Number(pc.ac) || 0}" /></label>
-          <label>Initiative<input type="number" data-pf="initiative" value="${Number(pc.initiative) || 0}" /></label>
-          <label>Speed<input type="number" data-pf="speed" value="${Number(pc.speed) || 0}" /></label>
-          <label>Level<input type="number" data-pf="level" min="1" value="${Math.max(1, Number(pc.level) || 1)}" /></label>
-          <label>Class<input type="text" data-pf="charClass" value="${esc(pc.charClass)}" placeholder="e.g. Swordsman" /></label>
-          <label>Devil Fruit<input type="text" data-pf="devilFruit" value="${esc(pc.devilFruit)}" placeholder="e.g. Gomu Gomu no Mi" /></label>
-        </div>
-        <div class="flashback-block">
-          <div class="flashback-title">Flashback Power-Up</div>
-          <div class="flashback-circles">${flashHtml}</div>
-          <div class="muted">Click circles to spend / regain (0–3)</div>
-        </div>
-      </section>
-
-      <section class="sheet-moves">${movesHtml}</section>
-    </div>
-
-    <div class="sheet-bottom-row">
-      <section class="sheet-health">
-        <h3>Health</h3>
-        <label>Max HP<input type="number" data-pf="maxHp" min="1" value="${Math.max(1, Number(pc.maxHp) || 1)}" /></label>
-        <label>Current HP<input type="number" data-pf="hp" min="0" value="${Math.max(0, Number(pc.hp) || 0)}" /></label>
-        <label>Temp HP<input type="number" data-pf="tempHp" min="0" value="${Math.max(0, Number(pc.tempHp) || 0)}" /></label>
-        <div class="btn-row">
-          <button type="button" data-pa="hpdelta" data-delta="-5">-5</button>
-          <button type="button" data-pa="hpdelta" data-delta="-1">-1</button>
-          <button type="button" data-pa="hpdelta" data-delta="1">+1</button>
-          <button type="button" data-pa="hpdelta" data-delta="5">+5</button>
-        </div>
-      </section>
-
-      <section class="sheet-scars">
-        <h3>Lasting Scars</h3>
-        <label>Physical Scar<input type="text" data-pf="scars:physical" value="${esc(pc.scars.physical)}" /></label>
-        <label>Emotional Scar<input type="text" data-pf="scars:emotional" value="${esc(pc.scars.emotional)}" /></label>
-        <label>Reputation Scar<input type="text" data-pf="scars:reputation" value="${esc(pc.scars.reputation)}" /></label>
-      </section>
-
-      <section class="sheet-ransom">
-        <h3>Devil's Ransom Connection</h3>
-        <label>Piece Carried<input type="text" data-pf="ransom:piece" value="${esc(pc.ransom.piece)}" placeholder="e.g. The Coral Eye" /></label>
-        <label>Curse Name<input type="text" data-pf="ransom:curseName" value="${esc(pc.ransom.curseName)}" /></label>
-        <label>Curse Pull DC<input type="number" data-pf="ransom:curseDC" min="0" value="${Number(pc.ransom.curseDC) || 0}" /></label>
-      </section>
-    </div>
-
-    <footer class="sheet-bounty">
-      <span class="bounty-label">BOUNTY</span>
-      <input type="number" data-pf="bounty" min="0" step="100" value="${Math.max(0, Number(pc.bounty) || 0)}" />
-      <span class="bounty-unit">berries</span>
-    </footer>
-
-    <!-- ============ CINEMATIC HEALTH TRACKER ============ -->
-    <header class="sheet-banner small">
-      <h3 class="sheet-banner-title">CINEMATIC HEALTH TRACKER</h3>
-      <div class="sheet-banner-sub">Pirate Anime D&amp;D — segmented body HP system</div>
-    </header>
-
-    <div class="cht-top">
-      <div class="cht-stat"><div class="cht-stat-label">♥ MAX HP</div><div class="cht-stat-val">${Number(pc.maxHp) || 0}</div></div>
-      <div class="cht-stat"><div class="cht-stat-label">❤ CURRENT HP</div><div class="cht-stat-val">${Number(pc.hp) || 0}</div></div>
-      <div class="cht-stat"><div class="cht-stat-label">⚔ TOTAL DAMAGE</div><div class="cht-stat-val">${totalDmg}</div></div>
-      <div class="cht-stat"><div class="cht-stat-label">🛡 SECTION HP <span class="muted">(÷6)</span></div><div class="cht-stat-val">${sec}</div></div>
-      <div class="cht-stat death-saves">
-        <div class="cht-stat-label">☠ DEATH SAVES</div>
-        ${deathSaveHtml}
-      </div>
-    </div>
-
-    <div class="cht-body">
-      <div class="cht-col left">${leftBodyHtml}</div>
-      <div class="cht-silhouette" aria-hidden="true">
-        <img src="assets/Charicter HP.png" alt="" />
-      </div>
-      <div class="cht-col right">${rightBodyHtml}</div>
-    </div>
-
-    <table class="damage-states-table">
-      <thead><tr><th>State</th><th>25% Wounded</th><th>50% Bleeding</th><th>75% Crumpled</th><th>100% Disabled</th></tr></thead>
-      <tbody><tr>
-        <th>Effect</th>
-        <td>No effect</td>
-        <td>-1 HP per round</td>
-        <td>Disadvantage if using the limb</td>
-        <td>Can't use that limb</td>
-      </tr></tbody>
-    </table>
-
-    <section class="sheet-notes">
-      <h3>Notes / Scars / Lingering Injuries</h3>
-      <textarea data-pf="healthNotes" rows="4" placeholder="Track lingering injuries, scars, and story notes here...">${esc(pc.healthNotes)}</textarea>
-      <label class="full">General Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
-    </section>
-
-    <div class="btn-row sheet-actions">
+  <article class="player-card sheet-image-card" data-pidx="${idx}">
+    <div class="sheet-actions-top btn-row">
+      <button type="button" data-pa="portrait-upload">${pc.portrait ? 'Change Portrait' : 'Upload Portrait'}</button>
+      ${pc.portrait ? '<button type="button" class="danger" data-pa="portrait-clear">Clear Portrait</button>' : ''}
+      <button type="button" data-pa="hpdelta" data-delta="-5">-5 HP</button>
+      <button type="button" data-pa="hpdelta" data-delta="-1">-1 HP</button>
+      <button type="button" data-pa="hpdelta" data-delta="1">+1 HP</button>
+      <button type="button" data-pa="hpdelta" data-delta="5">+5 HP</button>
       <button type="button" class="danger" data-pa="delete">Delete Sheet</button>
     </div>
+
+    <!-- ========== WANTED CHARACTER SHEET (image overlay) ========== -->
+    <div class="sheet-image-wrap wanted-wrap">
+      <img class="sheet-image" src="assets/Charicter sheet.png" alt="Wanted character sheet" draggable="false" />
+      ${identityOverlay}
+      ${portraitOverlay}
+      ${inventoryOverlay}
+      ${statsOverlay}
+      ${combatOverlay}
+      ${movesOverlay}
+      ${flashOverlay}
+      ${healthOverlay}
+      ${scarsOverlay}
+      ${ransomOverlay}
+      ${bountyOverlay}
+    </div>
+
+    <!-- ========== CINEMATIC HEALTH TRACKER (image overlay) ========== -->
+    <div class="sheet-image-wrap cht-wrap">
+      <img class="sheet-image" src="assets/Charicter HP.png" alt="Cinematic health tracker" draggable="false" />
+      ${chtTopOverlay}
+      ${dsBoxes}
+      ${bodyOverlayHtml}
+    </div>
+
+    <!-- Supplemental fields not on the printable sheet -->
+    <section class="sheet-extras parchment inset">
+      <div class="grid two">
+        <label>Level<input type="number" data-pf="level" min="1" value="${Math.max(1, Number(pc.level) || 1)}" /></label>
+        <label>Class<input type="text" data-pf="charClass" value="${esc(pc.charClass)}" placeholder="e.g. Swordsman" /></label>
+        <label>Devil Fruit<input type="text" data-pf="devilFruit" value="${esc(pc.devilFruit)}" placeholder="e.g. Gomu Gomu no Mi" /></label>
+        <label class="full">Health Notes / Lingering Injuries<textarea data-pf="healthNotes" rows="3">${esc(pc.healthNotes)}</textarea></label>
+        <label class="full">General Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
+      </div>
+      <div class="btn-row">
+        <button type="button" data-pa="inv-add">+ Add Item to Inventory</button>
+      </div>
+    </section>
+
     <div class="muted updated-meta">${sheetMetaText(pc)}</div>
   </article>`;
 }
@@ -1205,23 +1206,20 @@ function attachSheetHandlers(card, sheet, idx) {
     BODY_PARTS.reduce((sum, p) => sum + (Number(sheet.body?.[p.key]?.damage) || 0), 0);
 
   const refreshDerived = () => {
-    // stat mods
+    // stat mods (overlay spans on Wanted sheet)
     STAT_DEFS.forEach(s => {
-      const row = card.querySelector(`[data-pf="stat:${s.key}"]`);
-      if (!row) return;
-      const modEl = row.closest('.stat-row')?.querySelector('.stat-cell.mod b');
+      const modEl = card.querySelector(`[data-mod-for="${s.key}"]`);
       if (modEl) modEl.textContent = fmtMod(statMod(sheet.stats[s.key]));
     });
-    // cht stat row
-    const cht = card.querySelectorAll('.cht-top .cht-stat-val');
-    if (cht.length >= 4) {
-      cht[0].textContent = Number(sheet.maxHp) || 0;
-      cht[1].textContent = Number(sheet.hp) || 0;
-      cht[2].textContent = totalDamage();
-      cht[3].textContent = sectionHp(sheet.maxHp);
-    }
-    // section HP per body part
-    card.querySelectorAll('.cht-section-hp').forEach(el => { el.value = sectionHp(sheet.maxHp); });
+    // CHT readouts (total damage + section HP)
+    const totalEl = card.querySelector('[data-cht="totalDmg"]');
+    if (totalEl) totalEl.textContent = totalDamage();
+    const secEl = card.querySelector('[data-cht="sectionHp"]');
+    if (secEl) secEl.textContent = sectionHp(sheet.maxHp);
+    // per body-part section HP value
+    card.querySelectorAll('[data-cht-section]').forEach(el => {
+      el.textContent = sectionHp(sheet.maxHp);
+    });
   };
 
   // ---------- field bindings (data-pf="key" or "ns:sub" etc.) ----------
