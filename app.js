@@ -1239,13 +1239,30 @@ function renderSheetHtml(pc, idx) {
 }
 
 function attachSheetHandlers(card, sheet, idx) {
+  const sheetId = sheet.id;
+
+  // Always resolve to the LIVE sheet inside state — applyRemoteState() can
+  // replace `state.playerSheets` with a brand-new array, leaving the closure's
+  // `sheet` reference pointing at an orphaned object. If we mutated that
+  // orphan, the next save() would persist state.playerSheets without the
+  // user's edit and silently lose the data on refresh.
+  const getSheet = () => {
+    if (!Array.isArray(state.playerSheets)) return null;
+    return state.playerSheets.find((s) => s && s.id === sheetId) || null;
+  };
+
   const metaEl = card.querySelector('.updated-meta');
-  const refreshMeta = () => { if (metaEl) metaEl.textContent = sheetMetaText(sheet); };
+  const refreshMeta = () => {
+    const s = getSheet();
+    if (metaEl && s) metaEl.textContent = sheetMetaText(s);
+  };
   const isMine = sheet.player === currentUsername;
   const canEdit = isMine || isGmUser();
 
   const persist = () => {
-    stampSheetEdit(sheet);
+    const s = getSheet();
+    if (!s) return;
+    stampSheetEdit(s);
     save();
     refreshMeta();
   };
@@ -1255,7 +1272,9 @@ function attachSheetHandlers(card, sheet, idx) {
     if (!canEdit) { el.setAttribute('disabled', 'disabled'); return; }
     const handler = () => {
       if (!requireUsername()) return;
-      sheet[el.dataset.pf] = el.value;
+      const s = getSheet();
+      if (!s) return;
+      s[el.dataset.pf] = el.value;
       persist();
     };
     el.addEventListener('input', handler);
@@ -1266,8 +1285,9 @@ function attachSheetHandlers(card, sheet, idx) {
     btn.addEventListener('click', () => {
       const act = btn.dataset.pa;
       if (act === 'download-pdf') {
+        const s = getSheet() || sheet;
         if (window.pdfSheet && typeof window.pdfSheet.download === 'function') {
-          window.pdfSheet.download(sheet).catch((e) => {
+          window.pdfSheet.download(s).catch((e) => {
             console.error('[pdf-sheet] download failed', e);
             alert('Could not download filled PDF: ' + (e?.message || e));
           });
@@ -1276,8 +1296,13 @@ function attachSheetHandlers(card, sheet, idx) {
       }
       if (!canEdit) return;
       if (act === 'delete') {
-        if (!confirm(`Delete ${sheet.name || sheet.player || 'this'} character sheet?`)) return;
-        state.playerSheets.splice(idx, 1);
+        const s = getSheet();
+        if (!s) return;
+        if (!confirm(`Delete ${s.name || s.player || 'this'} character sheet?`)) return;
+        // Look up the live index — the array may have been re-ordered by a
+        // remote sync since this card was first rendered.
+        const liveIdx = state.playerSheets.findIndex((p) => p && p.id === sheetId);
+        if (liveIdx >= 0) state.playerSheets.splice(liveIdx, 1);
         save();
         renderPlayerSheets();
       }
@@ -1290,15 +1315,17 @@ function attachSheetHandlers(card, sheet, idx) {
       canEdit,
       onChange: (fieldName, value) => {
         if (!requireUsername()) return;
-        sheet.pdfFields = sheet.pdfFields || {};
+        const s = getSheet();
+        if (!s) return;
+        s.pdfFields = s.pdfFields || {};
         if (value === '' || value === false || value === null || value === undefined) {
-          delete sheet.pdfFields[fieldName];
+          delete s.pdfFields[fieldName];
         } else {
-          sheet.pdfFields[fieldName] = value;
+          s.pdfFields[fieldName] = value;
         }
         // Keep a few mirrored convenience fields in sync so display names update.
-        if (fieldName === 'character_name') sheet.name = String(value || '');
-        if (fieldName === 'bounty')         sheet.bounty = Number(value) || 0;
+        if (fieldName === 'character_name') s.name = String(value || '');
+        if (fieldName === 'bounty')         s.bounty = Number(value) || 0;
         persist();
       },
     });
