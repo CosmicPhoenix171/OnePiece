@@ -27,6 +27,19 @@ let mapSuppressPlacement = false;
 let lastMarkerZoom = null;
 let mapRoutePick = { active: false, startMarkerId: null, allowMapPoint: false };
 
+/* ---------- Fog of war ----------
+   Players see a dark fog over the map with a soft circular hole around
+   each ship marker (and the moving ship on an active route).
+   The GM (logged in as username "GM", case-insensitive) sees no fog. */
+const FOG_RADIUS = 110;     // map units around each ship
+const FOG_OPACITY = 0.94;
+const FOG_COLOR = '#06101f';
+
+function isGmUser() {
+  return typeof currentUsername === 'string'
+    && currentUsername.trim().toLowerCase() === 'gm';
+}
+
 function ensureMapView() {
   if (!state.mapView) state.mapView = { zoom: 1, panX: 0, panY: 0, travelPanelCollapsed: false };
   if (state.mapView.travelPanelCollapsed === undefined) state.mapView.travelPanelCollapsed = false;
@@ -184,6 +197,7 @@ function renderMapMarkers() {
     }).join('')
   )).join('');
   lastMarkerZoom = state.mapView?.zoom || 1;
+  renderMapFog();
 }
 
 function findMarker(id) {
@@ -235,6 +249,66 @@ function renderMapRoute() {
   }
   routeLayer.innerHTML = routeSvg;
   shipLayer.innerHTML = shipSvg;
+  renderMapFog();
+}
+
+function renderMapFog() {
+  const layer = $('#map-svg-fog');
+  if (!layer) return;
+  if (isGmUser()) {
+    layer.innerHTML = '';
+    return;
+  }
+
+  // Collect ship anchor positions in canvas-space, one per repeated tile copy.
+  const positions = [];
+  const shipMarkers = (state.mapMarkers || []).filter((m) => m.type === 'ship');
+  for (const m of shipMarkers) {
+    for (const copyIndex of [0, 1, 2]) {
+      positions.push({ x: toCanvasX(m.x, copyIndex), y: m.y });
+    }
+  }
+
+  // Include the moving ship glyph if a route is in progress.
+  const r = typeof activeRoute === 'function' ? activeRoute() : null;
+  if (r && r.status === 'active') {
+    const start = findMarker(r.startMarkerId);
+    const dest  = findMarker(r.destMarkerId);
+    if (start && dest) {
+      const days = Math.max(1, Number(r.days) || 1);
+      const day  = clamp(Number(r.currentDay) || 0, 0, days);
+      const t    = clamp(day / days, 0, 1);
+      for (const copyIndex of [0, 1, 2]) {
+        const x1 = toCanvasX(start.x, copyIndex);
+        const x2 = toCanvasX(dest.x,  copyIndex);
+        positions.push({
+          x: x1 + (x2 - x1) * t,
+          y: start.y + (dest.y - start.y) * t
+        });
+      }
+    }
+  }
+
+  const cutouts = positions.map((p) =>
+    `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${FOG_RADIUS}" fill="url(#fog-hole-gradient)"/>`
+  ).join('');
+
+  layer.innerHTML = `
+    <defs>
+      <radialGradient id="fog-hole-gradient">
+        <stop offset="0%"   stop-color="#000" stop-opacity="1"/>
+        <stop offset="65%"  stop-color="#000" stop-opacity="1"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+      </radialGradient>
+      <mask id="fog-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${MAP_CANVAS_WIDTH}" height="${MAP_HEIGHT}">
+        <rect x="0" y="0" width="${MAP_CANVAS_WIDTH}" height="${MAP_HEIGHT}" fill="white"/>
+        ${cutouts}
+      </mask>
+    </defs>
+    <rect x="0" y="0" width="${MAP_CANVAS_WIDTH}" height="${MAP_HEIGHT}"
+          fill="${FOG_COLOR}" fill-opacity="${FOG_OPACITY}"
+          mask="url(#fog-mask)" pointer-events="none"/>
+  `;
 }
 
 function enterRoutePickMode() {

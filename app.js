@@ -158,6 +158,8 @@ function updateLoginUI() {
       input.focus();
     }
   }
+  // Fog of war depends on who is logged in — refresh the map overlay.
+  try { if (typeof renderMapFog === 'function') renderMapFog(); } catch (e) { console.error(e); }
 }
 
 function requireUsername() {
