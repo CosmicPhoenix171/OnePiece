@@ -344,6 +344,30 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   font-size: 0.82rem;
   color: #6a5230;
 }
+.character-sheet-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--gold-dark);
+}
+.character-sheet-tabs button {
+  flex: 0 0 auto;
+  margin-bottom: -1px;
+  border-radius: 4px 4px 0 0;
+  border-bottom-color: var(--gold-dark);
+  background: rgba(255,255,255,0.35);
+  color: #4a2a0a;
+}
+.character-sheet-tabs button.active {
+  background: #ead08a;
+  border-bottom-color: #ead08a;
+  box-shadow: none;
+}
+.character-sheet-panels .player-card {
+  margin-top: 0;
+}
 
 /* ===========================================================
    Character Sheet — embedded fillable PDF

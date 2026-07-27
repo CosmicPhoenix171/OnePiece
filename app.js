@@ -1184,6 +1184,24 @@ function visibleSheetsForCurrentUser() {
     .filter(({ s }) => isSheetOwner(s));
 }
 
+function selectPlayerSheetTab(root, sheetId) {
+  const cards = $$('.player-card', root);
+  const tabs = $$('[data-sheet-tab]', root);
+  if (!cards.some((card) => card.dataset.sheetId === sheetId)) return;
+
+  root.dataset.activeSheetId = sheetId;
+  cards.forEach((card) => {
+    const active = card.dataset.sheetId === sheetId;
+    card.hidden = !active;
+  });
+  tabs.forEach((tab) => {
+    const active = tab.dataset.sheetTab === sheetId;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+  });
+}
+
 function renderPlayerSheets() {
   const root = $('#player-sheet-list');
   if (!root) return;
@@ -1216,7 +1234,7 @@ function renderPlayerSheets() {
   const signature = visible
     .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}`)
     .join(';');
-  if (root.dataset.sheetSig === signature && root.childElementCount === visible.length) {
+  if (root.dataset.sheetSig === signature && $$('.player-card', root).length === visible.length) {
     if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields();
     // Refresh meta text + notes in place.
     visible.forEach(({ s }) => {
@@ -1233,8 +1251,18 @@ function renderPlayerSheets() {
   }
 
   // Rebuild path: the visible set changed (different sheet, new sheet, owner swap).
+  const requestedSheetId = root.dataset.activeSheetId;
+  const activeSheetId = visible.some(({ s }) => s.id === requestedSheetId)
+    ? requestedSheetId
+    : visible[0].s.id;
   root.dataset.sheetSig = signature;
-  root.innerHTML = visible.map(({ s, i }) => renderSheetHtml(s, i)).join('');
+  root.innerHTML = `
+    ${visible.length > 1 ? `<div class="character-sheet-tabs" role="tablist" aria-label="Character sheets">
+      ${visible.map(({ s }) => `<button type="button" role="tab" data-sheet-tab="${esc(s.id)}">${esc(s.name || s.player || 'Character')}</button>`).join('')}
+    </div>` : ''}
+    <div class="character-sheet-panels">
+      ${visible.map(({ s, i }) => renderSheetHtml(s, i)).join('')}
+    </div>`;
 
   $$('.player-card', root).forEach((card) => {
     const idx = Number(card.dataset.pidx);
@@ -1242,6 +1270,24 @@ function renderPlayerSheets() {
     if (!sheet) return;
     attachSheetHandlers(card, sheet, idx);
   });
+
+  $$('[data-sheet-tab]', root).forEach((tab) => {
+    tab.addEventListener('click', () => selectPlayerSheetTab(root, tab.dataset.sheetTab));
+    tab.addEventListener('keydown', (event) => {
+      const tabs = $$('[data-sheet-tab]', root);
+      const current = tabs.indexOf(tab);
+      let next = current;
+      if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+      else if (event.key === 'ArrowLeft') next = (current - 1 + tabs.length) % tabs.length;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      selectPlayerSheetTab(root, tabs[next].dataset.sheetTab);
+      tabs[next].focus();
+    });
+  });
+  selectPlayerSheetTab(root, activeSheetId);
 }
 
 /* Escape a string for use inside a CSS attribute selector. */
