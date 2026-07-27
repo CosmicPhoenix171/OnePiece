@@ -15,9 +15,9 @@
 (function () {
   const PDF_URL = 'assets/Wanted_Character_Sheet_Form_Fillable(1).pdf';
   const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  // Render at roughly screen-width pixel density. Anything <800px on the
-  // base PDF looks blurry; we cap it so very wide screens don't OOM.
-  const MAX_CANVAS_WIDTH = 1100;
+  // Cap bitmap density rather than CSS width so the sheet always fills its
+  // container without allocating an excessive hi-DPI canvas.
+  const MAX_BITMAP_WIDTH = 2200;
 
   if (!window.pdfjsLib) {
     console.warn('[pdf-sheet] pdf.js global (pdfjsLib) is missing. Sheets will not render.');
@@ -108,12 +108,9 @@
     }
     const page = await pdf.getPage(1);
 
-    // Pick a render scale that targets the wrap width, capped for sanity.
+    // Pick a render scale that targets the wrapper's current visible width.
     const baseVp = page.getViewport({ scale: 1 });
-    const targetWidth = Math.min(
-      Math.max(wrap.clientWidth || baseVp.width, 700),
-      MAX_CANVAS_WIDTH
-    );
+    const targetWidth = wrap.clientWidth || baseVp.width;
     const scale = targetWidth / baseVp.width;
     const viewport = page.getViewport({ scale });
 
@@ -123,7 +120,7 @@
 
     // Account for hi-DPI screens for the canvas bitmap, but keep CSS size
     // in viewport pixels so widget coordinates line up.
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_BITMAP_WIDTH / viewport.width);
     canvas.width = Math.floor(viewport.width * dpr);
     canvas.height = Math.floor(viewport.height * dpr);
     canvas.style.width = viewport.width + 'px';
@@ -164,19 +161,48 @@
     wrap.dataset.pdfMount = 'ready';
     setStatus(card, '');
 
-    _mounts.set(sheet.id, { card, sheet, onChange, canEdit, fields: fieldEls });
+    const entry = _mounts.get(sheet.id);
+    if (entry) {
+      Object.assign(entry, { card, sheet, onChange, canEdit, fields: fieldEls, renderWidth: viewport.width });
+    }
   }
 
   /* Public: mount the fillable PDF into a card. */
   function mount(card, sheet, opts) {
     const onChange = (opts && opts.onChange) || (() => {});
     const canEdit = !!(opts && opts.canEdit);
-    // If the sheet was previously mounted in another card, drop the old entry.
-    _mounts.delete(sheet.id);
-    renderInto(card, sheet, onChange, canEdit).catch((e) => {
-      console.error('[pdf-sheet] mount failed', e);
-      setStatus(card, 'Render failed: ' + (e?.message || e));
-    });
+    const previous = _mounts.get(sheet.id);
+    if (previous && previous.resizeObserver) previous.resizeObserver.disconnect();
+
+    const entry = { card, sheet, onChange, canEdit, fields: new Map(), renderWidth: 0, rendering: false, pending: false };
+    _mounts.set(sheet.id, entry);
+
+    const renderAtCurrentWidth = () => {
+      const wrap = card.querySelector('.pdf-sheet-wrap');
+      const width = wrap ? wrap.clientWidth : 0;
+      if (!width || Math.abs(width - entry.renderWidth) < 1) return;
+      if (entry.rendering) {
+        entry.pending = true;
+        return;
+      }
+      entry.rendering = true;
+      const fresh = (window.__getState ? window.__getState().playerSheets : [])
+        .find((candidate) => candidate && candidate.id === sheet.id) || entry.sheet;
+      renderInto(card, fresh, onChange, canEdit).catch((e) => {
+        console.error('[pdf-sheet] mount failed', e);
+        setStatus(card, 'Render failed: ' + (e?.message || e));
+      }).finally(() => {
+        entry.rendering = false;
+        if (entry.pending) {
+          entry.pending = false;
+          renderAtCurrentWidth();
+        }
+      });
+    };
+
+    entry.resizeObserver = new ResizeObserver(renderAtCurrentWidth);
+    entry.resizeObserver.observe(card.querySelector('.pdf-sheet-wrap'));
+    renderAtCurrentWidth();
   }
 
   /* Public: push remote field values back into the rendered widgets.
