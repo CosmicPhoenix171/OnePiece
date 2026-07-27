@@ -1207,6 +1207,7 @@ function selectPlayerSheetTab(root, sheetId) {
   });
   if (window.pdfSheet && typeof window.pdfSheet.renderVisible === 'function') {
     window.pdfSheet.renderVisible();
+    requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
   }
 }
 
