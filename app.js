@@ -1019,7 +1019,7 @@ function makeEmptySheet() {
     devilFruit: '',
     notes: '',
     // Live PDF form values: { field_name: value } matching the AcroForm field
-    // names in assets/Wanted_Character_Sheet_Form_Fillable (2).pdf.
+    // names in assets/Wanted_Character_Sheet_Form_Fillable (4).pdf.
     pdfFields: {},
     updatedBy: currentUsername,
     updatedAt: new Date().toISOString(),
@@ -1077,7 +1077,7 @@ function normalizeSheet(pc) {
 }
 
 /* Map legacy structured sheet fields into the new pdfFields map, keyed by the
-  actual AcroForm field names inside Wanted_Character_Sheet_Form_Fillable (2).pdf. */
+  actual AcroForm field names inside Wanted_Character_Sheet_Form_Fillable (4).pdf. */
 function seedPdfFieldsFromLegacy(sheet) {
   const f = sheet.pdfFields;
   const put = (k, v) => { if (v !== undefined && v !== null && v !== '' && f[k] === undefined) f[k] = String(v); };

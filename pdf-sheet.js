@@ -1,7 +1,7 @@
 /* ===========================================================
    pdf-sheet.js — Embedded fillable PDF character sheet.
 
-    - Renders assets/Wanted_Character_Sheet_Form_Fillable (2).pdf onto a canvas
+    - Renders assets/Wanted_Character_Sheet_Form_Fillable (4).pdf onto a canvas
      for every visible sheet card using pdf.js.
    - For every AcroForm widget on the page, creates an HTML <input>/
      <textarea>/<checkbox> positioned at the widget's exact PDF
@@ -13,8 +13,8 @@
      into a real copy of the PDF for printing.
    =========================================================== */
 (function () {
-  const PDF_URL = 'assets/Wanted_Character_Sheet_Form_Fillable (2).pdf';
-  const PREVIEW_URL = 'assets/Wanted_Character_Sheet_Form_Fillable_2_preview.jpg';
+  const PDF_URL = 'assets/Wanted_Character_Sheet_Form_Fillable (4).pdf';
+  const PREVIEW_URL = 'assets/Wanted_Character_Sheet_Form_Fillable_4_preview.jpg';
   const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const MAX_BITMAP_WIDTH = 1224;
 

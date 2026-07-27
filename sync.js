@@ -53,9 +53,10 @@
   let pushTimer = null;
   window.syncPush = function (state) {
     if (pushTimer) clearTimeout(pushTimer);
+    const snapshot = structuredClone(stripLocalOnly(state));
     pushTimer = setTimeout(() => {
       setStatus('syncing', 'syncing…');
-      ref.set({ _writerId: writerId, _ts: Date.now(), data: stripLocalOnly(state) })
+      ref.set({ _writerId: writerId, _ts: Date.now(), data: snapshot })
         .then(() => setStatus('connected', 'live · ' + sessionId))
         .catch((err) => {
           console.error('[sync] push failed:', err);
