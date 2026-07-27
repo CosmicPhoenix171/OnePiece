@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>The Devil's Ransom</title>
-<link rel="stylesheet" href="styles.css?v=2" />
+<link rel="stylesheet" href="styles.css?v=3" />
 </head>
 <body>
 <header class="topbar">
@@ -356,7 +356,7 @@
           <div class="meter-label">💰 Berries</div>
           <div class="meter-row">
             <button data-shipdelta='{"k":"berries","d":-100}'>-100</button>
-            <span class="meter-val"><span id="ship-berries">0</span></span>
+            <span class="meter-val"><input id="ship-berries" type="number" data-ship="berries" min="0" step="1" aria-label="Berries" /></span>
             <button data-shipdelta='{"k":"berries","d":100}'>+100</button>
             <button data-shipdelta='{"k":"berries","d":1000}'>+1k</button>
           </div>
@@ -421,7 +421,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="pdf-sheet.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=6"></script>
 <script src="map.js"></script>
 <script src="sync.js?v=2"></script>
 </body>

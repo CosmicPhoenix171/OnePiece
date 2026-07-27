@@ -1804,6 +1804,10 @@ function bindShipFields() {
     el.addEventListener('input', () => {
       let v = el.value;
       if (el.type === 'number') v = Number(v) || 0;
+      if (k === 'berries') {
+        v = Math.max(0, v);
+        el.value = v;
+      }
       state.ship[k] = v;
       save(); renderShip();
     });
@@ -1822,6 +1826,8 @@ function bindShipFields() {
 
 function renderShip() {
   const s = state.ship;
+  if (!Array.isArray(s.crew)) s.crew = [];
+  if (!Array.isArray(s.log)) s.log = [];
   $('#ship-hull').textContent = s.hull;
   $('#ship-sails').textContent = s.sails;
   $('#ship-morale').textContent = s.morale;
@@ -1829,7 +1835,8 @@ function renderShip() {
   $('#ship-water').textContent = s.water;
   $('#ship-medicine').textContent = s.medicine;
   $('#ship-ammo').textContent = s.ammo;
-  $('#ship-berries').textContent = s.berries;
+  const berriesInput = $('#ship-berries');
+  if (berriesInput !== document.activeElement) berriesInput.value = s.berries;
   $('#ship-repair').textContent = s.repair;
   const hullPct = s.hullMax ? clamp((s.hull / s.hullMax) * 100, 0, 100) : 0;
   $('#hull-fill').style.width = hullPct + '%';

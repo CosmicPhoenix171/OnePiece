@@ -1136,6 +1136,7 @@ details.travel-block[open] > summary {
   width: 60px; display: inline-block; padding: 2px 4px; font-size: 0.9rem;
   margin: 0 0 0 4px;
 }
+#ship-berries { width: 110px; text-align: center; }
 #hull-fill { background: linear-gradient(90deg, #7a1f1f, #2a7a2a); height: 100%; transition: width 0.2s; }
 #sails-fill { background: linear-gradient(90deg, #444, #fff); height: 100%; transition: width 0.2s; }
 #morale-fill { background: linear-gradient(90deg, #5a1010, #f5c75a); height: 100%; transition: width 0.2s; }
