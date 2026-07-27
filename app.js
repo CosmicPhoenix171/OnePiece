@@ -936,6 +936,18 @@ const STAT_DEFS = [
   { key: 'wis', label: 'Wisdom' },
   { key: 'cha', label: 'Charisma' },
 ];
+const PDF_FIELD_RENAMES = {
+  home_sea_island_extra: 'home_sea_island_notes',
+  portrait_or_character_art_note: 'portrait_or_description',
+  flashback_power_up_1: 'flashback_power_1',
+  flashback_power_up_2: 'flashback_power_2',
+  flashback_power_up_3: 'flashback_power_3',
+  signature_move_1_description: 'signature_move_1_what_it_does',
+  signature_move_2_description: 'signature_move_2_what_it_does',
+  signature_move_3_description: 'signature_move_3_what_it_does',
+  signature_move_4_description: 'signature_move_4_what_it_does',
+  devils_ransom_piece_casted: 'devils_ransom_piece_cursed',
+};
 
 function statMod(score) {
   const n = Number(score);
@@ -1001,7 +1013,7 @@ function makeEmptySheet() {
     devilFruit: '',
     notes: '',
     // Live PDF form values: { field_name: value } matching the AcroForm field
-    // names in assets/Wanted_Character_Sheet_Fillable.pdf.
+    // names in assets/Wanted_Character_Sheet_Form_Fillable(1).pdf.
     pdfFields: {},
     updatedBy: currentUsername,
     updatedAt: new Date().toISOString(),
@@ -1045,6 +1057,11 @@ function normalizeSheet(pc) {
   });
   merged.flashback = clamp(Number(pc.flashback) || 0, 0, 3);
   merged.pdfFields = (pc.pdfFields && typeof pc.pdfFields === 'object') ? { ...pc.pdfFields } : {};
+  Object.entries(PDF_FIELD_RENAMES).forEach(([oldName, newName]) => {
+    if (merged.pdfFields[newName] === undefined && merged.pdfFields[oldName] !== undefined) {
+      merged.pdfFields[newName] = merged.pdfFields[oldName];
+    }
+  });
   // First time we see a legacy sheet, seed pdfFields from the structured data
   // so the embedded PDF form opens pre-populated.
   if (!pc.pdfFields || !Object.keys(pc.pdfFields).length) {
@@ -1054,7 +1071,7 @@ function normalizeSheet(pc) {
 }
 
 /* Map legacy structured sheet fields into the new pdfFields map, keyed by the
-   actual AcroForm field names inside Wanted_Character_Sheet_Fillable.pdf. */
+  actual AcroForm field names inside Wanted_Character_Sheet_Form_Fillable(1).pdf. */
 function seedPdfFieldsFromLegacy(sheet) {
   const f = sheet.pdfFields;
   const put = (k, v) => { if (v !== undefined && v !== null && v !== '' && f[k] === undefined) f[k] = String(v); };
@@ -1079,7 +1096,7 @@ function seedPdfFieldsFromLegacy(sheet) {
   put('bounty',      sheet.bounty);
   (sheet.moves || []).slice(0,4).forEach((m, i) => {
     put(`signature_move_${i+1}_name`,        m?.name);
-    put(`signature_move_${i+1}_description`, m?.desc);
+    put(`signature_move_${i+1}_what_it_does`, m?.desc);
   });
   (sheet.inventory || []).slice(0,6).forEach((row, i) => {
     put(`inventory_item_${i+1}`,         row?.item);
@@ -1089,12 +1106,12 @@ function seedPdfFieldsFromLegacy(sheet) {
   put('physical_scar',              sheet.scars?.physical);
   put('emotional_scar',             sheet.scars?.emotional);
   put('reputation_scar',            sheet.scars?.reputation);
-  put('devils_ransom_piece_casted', sheet.ransom?.piece);
+  put('devils_ransom_piece_cursed', sheet.ransom?.piece);
   put('devils_ransom_curse_name',   sheet.ransom?.curseName);
   put('devils_ransom_curse_pull_dc', sheet.ransom?.curseDC);
   // Flashback charges → checkboxes
   for (let i = 1; i <= 3; i++) {
-    if (i <= (Number(sheet.flashback) || 0)) f[`flashback_power_up_${i}`] = true;
+    if (i <= (Number(sheet.flashback) || 0)) f[`flashback_power_${i}`] = true;
   }
 }
 
@@ -1201,13 +1218,13 @@ function renderPlayerSheets() {
     .join(';');
   if (root.dataset.sheetSig === signature && root.childElementCount === visible.length) {
     if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields();
-    // Refresh meta text + extras (Class/DevilFruit/Notes) in place.
+    // Refresh meta text + notes in place.
     visible.forEach(({ s }) => {
       const card = root.querySelector(`.player-card[data-sheet-id="${cssEsc(s.id)}"]`);
       if (!card) return;
       const meta = card.querySelector('.updated-meta');
       if (meta) meta.textContent = sheetMetaText(s);
-      ['charClass','devilFruit','notes'].forEach((k) => {
+      ['notes'].forEach((k) => {
         const el = card.querySelector(`[data-pf="${k}"]`);
         if (el && el !== document.activeElement && el.value !== (s[k] || '')) el.value = s[k] || '';
       });
@@ -1250,9 +1267,7 @@ function renderSheetHtml(pc, idx) {
       <div class="pdf-sheet-widgets"></div>
     </div>
     <section class="sheet-extras parchment inset">
-      <div class="grid two">
-        <label>Class<input type="text" data-pf="charClass" value="${esc(pc.charClass)}" placeholder="e.g. Swordsman" /></label>
-        <label>Devil Fruit<input type="text" data-pf="devilFruit" value="${esc(pc.devilFruit)}" placeholder="e.g. Gomu Gomu no Mi" /></label>
+      <div class="grid">
         <label class="full">General Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
       </div>
     </section>
