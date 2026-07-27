@@ -1,7 +1,7 @@
 /* ===========================================================
    pdf-sheet.js — Embedded fillable PDF character sheet.
 
-    - Renders assets/Wanted_Character_Sheet_Form_Fillable(1).pdf onto a canvas
+    - Renders assets/Wanted_Character_Sheet_Form_Fillable (2).pdf onto a canvas
      for every visible sheet card using pdf.js.
    - For every AcroForm widget on the page, creates an HTML <input>/
      <textarea>/<checkbox> positioned at the widget's exact PDF
@@ -13,11 +13,10 @@
      into a real copy of the PDF for printing.
    =========================================================== */
 (function () {
-  const PDF_URL = 'assets/Wanted_Character_Sheet_Form_Fillable(1).pdf';
+  const PDF_URL = 'assets/Wanted_Character_Sheet_Form_Fillable (2).pdf';
+  const PREVIEW_URL = 'assets/Wanted_Character_Sheet_Form_Fillable_2_preview.jpg';
   const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  // Cap bitmap density rather than CSS width so the sheet always fills its
-  // container without allocating an excessive hi-DPI canvas.
-  const MAX_BITMAP_WIDTH = 2200;
+  const MAX_BITMAP_WIDTH = 1224;
 
   if (!window.pdfjsLib) {
     console.warn('[pdf-sheet] pdf.js global (pdfjsLib) is missing. Sheets will not render.');
@@ -28,6 +27,7 @@
   // --- module-level caches ----------------------------------------------------
   let _pdfBytesPromise = null; // ArrayBuffer of the source PDF (for pdf-lib too)
   let _pdfDocPromise = null;   // pdf.js PDFDocumentProxy
+  let _previewPromise = null;  // Fast raster background for the heavy source artwork
   const _mounts = new Map();   // sheetId -> { card, sheet, onChange, canEdit, fields: Map<name, el> }
 
   function loadPdfBytes() {
@@ -48,6 +48,16 @@
       );
     }
     return _pdfDocPromise;
+  }
+
+  function loadPreview() {
+    if (!_previewPromise) {
+      _previewPromise = fetch(PREVIEW_URL).then((response) => {
+        if (!response.ok) throw new Error('Failed to fetch PDF preview: ' + response.status);
+        return response.blob();
+      }).then((blob) => createImageBitmap(blob));
+    }
+    return _previewPromise;
   }
 
   function setStatus(card, text) {
@@ -130,7 +140,8 @@
 
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    const preview = await loadPreview();
+    ctx.drawImage(preview, 0, 0, viewport.width, viewport.height);
 
     // Build widgets from the annotations.
     layer.innerHTML = '';
@@ -202,7 +213,14 @@
 
     entry.resizeObserver = new ResizeObserver(renderAtCurrentWidth);
     entry.resizeObserver.observe(card.querySelector('.pdf-sheet-wrap'));
+    entry.renderAtCurrentWidth = renderAtCurrentWidth;
     renderAtCurrentWidth();
+  }
+
+  function renderVisible() {
+    for (const entry of _mounts.values()) {
+      if (!entry.card.hidden && entry.renderAtCurrentWidth) entry.renderAtCurrentWidth();
+    }
   }
 
   /* Public: push remote field values back into the rendered widgets.
@@ -270,5 +288,5 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  window.pdfSheet = { mount, refreshAll, download };
+  window.pdfSheet = { mount, refreshAll, renderVisible, download };
 })();

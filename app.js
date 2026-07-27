@@ -204,6 +204,9 @@ $$('#tabs .tab').forEach(t => t.addEventListener('click', () => {
   $$('.panel').forEach(p => p.classList.remove('active'));
   t.classList.add('active');
   $('#tab-' + t.dataset.tab).classList.add('active');
+  if (t.dataset.tab === 'characters') {
+    requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
+  }
 }));
 
 /* ===========================================================
@@ -346,6 +349,9 @@ function showTab(name) {
   $$('.panel').forEach(p => p.classList.remove('active'));
   tab.classList.add('active');
   panel.classList.add('active');
+  if (name === 'characters') {
+    requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
+  }
 }
 
 function encounterOutputTarget() {
@@ -1013,7 +1019,7 @@ function makeEmptySheet() {
     devilFruit: '',
     notes: '',
     // Live PDF form values: { field_name: value } matching the AcroForm field
-    // names in assets/Wanted_Character_Sheet_Form_Fillable(1).pdf.
+    // names in assets/Wanted_Character_Sheet_Form_Fillable (2).pdf.
     pdfFields: {},
     updatedBy: currentUsername,
     updatedAt: new Date().toISOString(),
@@ -1071,7 +1077,7 @@ function normalizeSheet(pc) {
 }
 
 /* Map legacy structured sheet fields into the new pdfFields map, keyed by the
-  actual AcroForm field names inside Wanted_Character_Sheet_Form_Fillable(1).pdf. */
+  actual AcroForm field names inside Wanted_Character_Sheet_Form_Fillable (2).pdf. */
 function seedPdfFieldsFromLegacy(sheet) {
   const f = sheet.pdfFields;
   const put = (k, v) => { if (v !== undefined && v !== null && v !== '' && f[k] === undefined) f[k] = String(v); };
@@ -1099,9 +1105,8 @@ function seedPdfFieldsFromLegacy(sheet) {
     put(`signature_move_${i+1}_what_it_does`, m?.desc);
   });
   (sheet.inventory || []).slice(0,6).forEach((row, i) => {
-    put(`inventory_item_${i+1}`,         row?.item);
-    put(`inventory_quantity_${i+1}`,     row?.qty);
-    put(`inventory_weight_value_${i+1}`, row?.weight);
+    put(`inventory_item_${i+1}`,     row?.item);
+    put(`inventory_quantity_${i+1}`, row?.qty);
   });
   put('physical_scar',              sheet.scars?.physical);
   put('emotional_scar',             sheet.scars?.emotional);
@@ -1200,6 +1205,9 @@ function selectPlayerSheetTab(root, sheetId) {
     tab.setAttribute('aria-selected', String(active));
     tab.tabIndex = active ? 0 : -1;
   });
+  if (window.pdfSheet && typeof window.pdfSheet.renderVisible === 'function') {
+    window.pdfSheet.renderVisible();
+  }
 }
 
 function renderPlayerSheets() {
