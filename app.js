@@ -954,6 +954,34 @@ const PDF_FIELD_RENAMES = {
   signature_move_4_description: 'signature_move_4_what_it_does',
   devils_ransom_piece_casted: 'devils_ransom_piece_cursed',
 };
+const PDF_ABILITY_MOD_FIELDS = {
+  strength_score: 'strength_mod',
+  dexterity_score: 'dexterity_mod',
+  constitution_score: 'constitution_mod',
+  intelligence_score: 'intelligence_mod',
+  wisdom_score: 'wisdom_mod',
+  charisma_score: 'charisma_mod',
+};
+const PDF_SKILL_ABILITIES = {
+  acrobatics: 'dexterity',
+  animal_handling: 'wisdom',
+  arcana: 'intelligence',
+  athletics: 'strength',
+  deception: 'charisma',
+  history: 'intelligence',
+  insight: 'wisdom',
+  intimidation: 'charisma',
+  investigation: 'intelligence',
+  medicine: 'wisdom',
+  nature: 'intelligence',
+  perception: 'wisdom',
+  performance: 'charisma',
+  persuasion: 'charisma',
+  religion: 'intelligence',
+  sleight_of_hand: 'dexterity',
+  stealth: 'dexterity',
+  survival: 'wisdom',
+};
 
 function statMod(score) {
   const n = Number(score);
@@ -961,6 +989,35 @@ function statMod(score) {
   return Math.floor((n - 10) / 2);
 }
 function fmtMod(m) { return (m >= 0 ? `+${m}` : `${m}`); }
+function updatePdfAbilityModifier(fields, scoreField) {
+  const modifierField = PDF_ABILITY_MOD_FIELDS[scoreField];
+  if (!modifierField) return false;
+  const rawScore = fields[scoreField];
+  const score = Number(rawScore);
+  if (rawScore === '' || !Number.isInteger(score) || score < 1 || score > 30) {
+    delete fields[modifierField];
+  } else {
+    fields[modifierField] = fmtMod(statMod(score));
+  }
+  return true;
+}
+function updatePdfSkillModifiers(fields, changedField) {
+  const isAbilityScore = Object.hasOwn(PDF_ABILITY_MOD_FIELDS, changedField);
+  const isProficiency = /^skill_.+_proficient$/.test(changedField || '');
+  if (changedField && !isAbilityScore && !isProficiency) return false;
+
+  Object.entries(PDF_SKILL_ABILITIES).forEach(([skill, ability]) => {
+    const score = Number(fields[`${ability}_score`]);
+    const modifierField = `skill_${skill}_modifier`;
+    if (!Number.isInteger(score) || score < 1 || score > 30) {
+      delete fields[modifierField];
+      return;
+    }
+    const proficient = Boolean(fields[`skill_${skill}_proficient`]);
+    fields[modifierField] = fmtMod(statMod(score) + (proficient ? 5 : 0));
+  });
+  return true;
+}
 function sectionHp(maxHp) { return Math.max(1, Math.ceil((Number(maxHp) || 6) / 6)); }
 
 function makeEmptyBodyPart() {
@@ -1073,6 +1130,10 @@ function normalizeSheet(pc) {
   if (!pc.pdfFields || !Object.keys(pc.pdfFields).length) {
     seedPdfFieldsFromLegacy(merged);
   }
+  Object.keys(PDF_ABILITY_MOD_FIELDS).forEach((scoreField) => {
+    updatePdfAbilityModifier(merged.pdfFields, scoreField);
+  });
+  updatePdfSkillModifiers(merged.pdfFields);
   return merged;
 }
 
@@ -1426,9 +1487,12 @@ function attachSheetHandlers(card, sheet, idx) {
         } else {
           s.pdfFields[fieldName] = value;
         }
+        const updatedModifier = updatePdfAbilityModifier(s.pdfFields, fieldName);
+        const updatedSkills = updatePdfSkillModifiers(s.pdfFields, fieldName);
         // Keep a few mirrored convenience fields in sync so display names update.
         if (fieldName === 'character_name') s.name = String(value || '');
         if (fieldName === 'bounty')         s.bounty = Number(value) || 0;
+        if ((updatedModifier || updatedSkills) && window.pdfSheet) window.pdfSheet.refreshAll();
         persist();
       },
     });

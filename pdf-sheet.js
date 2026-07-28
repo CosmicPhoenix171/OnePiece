@@ -17,6 +17,18 @@
   const PREVIEW_URL = 'assets/Wanted_Character_Sheet_Form_Fillable_4_preview.jpg';
   const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const MAX_BITMAP_WIDTH = 1224;
+  const CALCULATED_FIELDS = new Set([
+    'strength_mod',
+    'dexterity_mod',
+    'constitution_mod',
+    'intelligence_mod',
+    'wisdom_mod',
+    'charisma_mod',
+  ]);
+
+  function isCalculatedField(fieldName) {
+    return CALCULATED_FIELDS.has(fieldName) || /^skill_.+_modifier$/.test(fieldName);
+  }
 
   if (!window.pdfjsLib) {
     console.warn('[pdf-sheet] pdf.js global (pdfjsLib) is missing. Sheets will not render.');
@@ -115,6 +127,7 @@
     el.dataset.field = annotation.fieldName;
     el.spellcheck = false;
     if (!canEdit) el.disabled = true;
+    if (isCalculatedField(annotation.fieldName)) el.readOnly = true;
     Object.assign(el.style, {
       position: 'absolute',
       left: left + 'px',
