@@ -373,6 +373,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
    Character Sheet — embedded fillable PDF
    =========================================================== */
 .pdf-sheet-card {
+  position: relative;
   background: rgba(0, 0, 0, 0.10);
   padding: 12px;
 }
@@ -388,6 +389,85 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   font-size: 0.9rem;
   color: #4a2a0a;
 }
+.sheet-reference-grid {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sheet-reference {
+  position: relative;
+  color: #2a1a0a;
+}
+.sheet-reference summary {
+  position: relative;
+  display: block;
+  margin: 0;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid var(--gold-dark);
+  border-radius: 4px;
+  background: #7a1f1f;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  color: #fff4cf;
+  font-family: 'Cinzel', 'Georgia', serif;
+  font-size: 0.82rem;
+  font-weight: bold;
+  letter-spacing: 0;
+  text-align: center;
+  cursor: pointer;
+  list-style: none;
+}
+.sheet-reference summary::-webkit-details-marker { display: none; }
+.sheet-reference summary::after {
+  content: '+';
+  position: absolute;
+  right: 10px;
+  font-family: 'Georgia', serif;
+  font-size: 1rem;
+  line-height: 0.8;
+}
+.sheet-reference[open] summary::after { content: '−'; }
+.sheet-reference summary:hover,
+.sheet-reference summary:focus-visible { background: #962828; }
+.sheet-reference-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 6;
+  width: min(280px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--gold-dark);
+  border-radius: 4px;
+  background: rgba(255, 248, 220, 0.98);
+  box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+}
+.sheet-reference table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+.sheet-reference th,
+.sheet-reference td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(122, 77, 22, 0.2);
+  text-align: left;
+  vertical-align: top;
+}
+.sheet-reference th {
+  background: rgba(218, 181, 91, 0.28);
+  color: #5b2b12;
+  font-size: 0.68rem;
+}
+.sheet-reference td:first-child {
+  width: 43%;
+  font-weight: bold;
+  white-space: nowrap;
+}
+.sheet-reference tr:last-child td { border-bottom: 0; }
+.sheet-reference tr.critical td { color: #7a1f1f; }
+.sheet-reference-dcs .sheet-reference-panel { left: auto; right: 0; }
 .pdf-sheet-wrap {
   position: relative;
   display: block;

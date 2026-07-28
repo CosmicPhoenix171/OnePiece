@@ -1334,6 +1334,24 @@ function renderPlayerSheets() {
       ${visible.map(({ s, i }) => renderSheetHtml(s, i)).join('')}
     </div>`;
 
+  const sheetToolbar = document.querySelector('#tab-characters > .parchment > .btn-row');
+  if (sheetToolbar) {
+    sheetToolbar.querySelector('.sheet-reference-grid')?.remove();
+    const sharedReferences = root.querySelector('.sheet-reference-grid');
+    if (sharedReferences) {
+      sheetToolbar.appendChild(sharedReferences);
+      sharedReferences.querySelectorAll('details').forEach((details) => {
+        details.addEventListener('toggle', () => {
+          if (!details.open) return;
+          sharedReferences.querySelectorAll('details[open]').forEach((other) => {
+            if (other !== details) other.open = false;
+          });
+        });
+      });
+    }
+    root.querySelectorAll('.sheet-reference-grid').forEach((references) => references.remove());
+  }
+
   $$('.player-card', root).forEach((card) => {
     const idx = Number(card.dataset.pidx);
     const sheet = state.playerSheets[idx];
@@ -1376,6 +1394,48 @@ function renderSheetHtml(pc, idx) {
       <span class="sheet-owner">Owner: <b>${esc(owner)}</b>${isGmUser() && !isMine ? ' <span class="muted">(viewing as GM)</span>' : ''}</span>
       <button type="button" data-pa="download-pdf" class="gold">📄 Download Filled PDF</button>
       ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
+    </div>
+    <div class="sheet-reference-grid" aria-label="Roll reference tables">
+      <details class="sheet-reference sheet-reference-outcomes">
+        <summary>Roll Outcomes</summary>
+        <div class="sheet-reference-panel">
+          <table>
+            <thead><tr><th>Result vs. DC</th><th>Outcome</th></tr></thead>
+            <tbody>
+              <tr class="critical"><td>Natural 1</td><td>Instant Failure</td></tr>
+              <tr><td>11+ below</td><td>Disastrous Failure</td></tr>
+              <tr><td>6–10 below</td><td>Failure</td></tr>
+              <tr><td>1–5 below</td><td>Partial Failure</td></tr>
+              <tr><td>Meets DC</td><td>Narrow Success</td></tr>
+              <tr><td>1–5 above</td><td>Success</td></tr>
+              <tr><td>6–10 above</td><td>Great Success</td></tr>
+              <tr><td>11+ above</td><td>Exceptional Success</td></tr>
+              <tr class="critical"><td>Natural 20</td><td>Instant Success</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+      <details class="sheet-reference sheet-reference-dcs">
+        <summary>DC Guide</summary>
+        <div class="sheet-reference-panel">
+          <table>
+            <thead><tr><th>DC</th><th>Challenge</th></tr></thead>
+            <tbody>
+              <tr><td>5</td><td>Very Easy</td></tr>
+              <tr><td>8</td><td>Easy</td></tr>
+              <tr><td>10</td><td>Routine</td></tr>
+              <tr><td>12</td><td>Moderate</td></tr>
+              <tr><td>15</td><td>Challenging</td></tr>
+              <tr><td>18</td><td>Difficult</td></tr>
+              <tr><td>20</td><td>Very Difficult</td></tr>
+              <tr><td>25</td><td>Extreme</td></tr>
+              <tr><td>30</td><td>Legendary</td></tr>
+              <tr><td>35</td><td>Superhuman</td></tr>
+              <tr><td>40+</td><td>Nearly Impossible</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
     <div class="pdf-sheet-wrap${canEdit ? '' : ' readonly'}" data-pdf-mount="pending">
       <div class="pdf-sheet-status muted" role="status" aria-live="polite">Loading fillable character sheet…</div>
