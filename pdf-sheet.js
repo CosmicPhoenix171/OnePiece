@@ -65,6 +65,29 @@
     if (el) el.textContent = text || '';
   }
 
+  function fitFieldText(el) {
+    if (!el || el.type === 'checkbox') return;
+
+    const styles = getComputedStyle(el);
+    const verticalSpace = el.clientHeight
+      - parseFloat(styles.paddingTop)
+      - parseFloat(styles.paddingBottom);
+    const maxSize = Math.max(4, Math.min(24, verticalSpace / 1.1));
+    let low = Math.min(4, maxSize);
+    let high = maxSize;
+
+    for (let i = 0; i < 7; i += 1) {
+      const size = (low + high) / 2;
+      el.style.fontSize = size + 'px';
+      if (el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1) {
+        low = size;
+      } else {
+        high = size;
+      }
+    }
+    el.style.fontSize = low + 'px';
+  }
+
   /* Build one HTML input/textarea/checkbox for a single AcroForm widget. */
   function buildWidget(annotation, viewport, currentValue, canEdit) {
     const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle(annotation.rect);
@@ -153,10 +176,12 @@
       const stored = sheet.pdfFields ? sheet.pdfFields[a.fieldName] : undefined;
       const el = buildWidget(a, viewport, stored, canEdit);
       layer.appendChild(el);
+      fitFieldText(el);
       fieldEls.set(a.fieldName, el);
 
       if (canEdit) {
         const fire = () => {
+          fitFieldText(el);
           const v = el.type === 'checkbox' ? el.checked : el.value;
           try { onChange(a.fieldName, v); } catch (err) { console.error(err); }
         };
@@ -247,7 +272,10 @@
           if (el.checked !== next) el.checked = next;
         } else {
           const next = val != null ? String(val) : '';
-          if (el.value !== next) el.value = next;
+          if (el.value !== next) {
+            el.value = next;
+            fitFieldText(el);
+          }
         }
       });
     }

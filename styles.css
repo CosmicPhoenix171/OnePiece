@@ -416,6 +416,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   border: 1px dashed rgba(180, 130, 30, 0.0);
   border-radius: 2px;
   font: 14px/1.1 'Courier New', 'Consolas', monospace;
+  overflow: hidden;
   color: #1c1206;
   padding: 1px 3px;
   box-sizing: border-box;
