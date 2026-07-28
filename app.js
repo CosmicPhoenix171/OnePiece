@@ -1378,7 +1378,7 @@ function renderSheetHtml(pc, idx) {
       ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
     </div>
     <div class="pdf-sheet-wrap${canEdit ? '' : ' readonly'}" data-pdf-mount="pending">
-      <div class="pdf-sheet-status muted">Loading fillable character sheet…</div>
+      <div class="pdf-sheet-status muted" role="status" aria-live="polite">Loading fillable character sheet…</div>
       <canvas class="pdf-sheet-canvas"></canvas>
       <div class="pdf-sheet-widgets"></div>
     </div>

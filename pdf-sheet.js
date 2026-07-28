@@ -40,6 +40,7 @@
   let _pdfBytesPromise = null; // ArrayBuffer of the source PDF (for pdf-lib too)
   let _pdfDocPromise = null;   // pdf.js PDFDocumentProxy
   let _previewPromise = null;  // Fast raster background for the heavy source artwork
+  let _rollResultTimer = null;
   const _mounts = new Map();   // sheetId -> { card, sheet, onChange, canEdit, fields: Map<name, el> }
 
   function loadPdfBytes() {
@@ -75,6 +76,46 @@
   function setStatus(card, text) {
     const el = card.querySelector('.pdf-sheet-status');
     if (el) el.textContent = text || '';
+  }
+
+  function rollLabel(fieldName) {
+    return fieldName
+      .replace(/^skill_/, '')
+      .replace(/_(modifier|mod)$/, '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function rollModifier(card, el) {
+    const modifier = Number(el.value);
+    if (el.value.trim() === '' || !Number.isFinite(modifier)) {
+      setStatus(card, `Enter an ability score before rolling ${rollLabel(el.dataset.field)}.`);
+      return;
+    }
+    const die = Math.floor(Math.random() * 20) + 1;
+    const total = die + modifier;
+    const signedModifier = modifier >= 0 ? `+ ${modifier}` : `- ${Math.abs(modifier)}`;
+    const status = card.querySelector('.pdf-sheet-status');
+    if (status) {
+      status.style.left = `${el.offsetLeft + (el.offsetWidth / 2)}px`;
+      status.style.top = `${Math.max(8, el.offsetTop - 42)}px`;
+    }
+    setStatus(card, `${rollLabel(el.dataset.field)}: d20 ${die} ${signedModifier} = ${total}`);
+    clearTimeout(_rollResultTimer);
+    _rollResultTimer = setTimeout(() => setStatus(card, ''), 8000);
+  }
+
+  function makeRollable(card, el) {
+    el.classList.add('pdf-roll-field');
+    const label = rollLabel(el.dataset.field);
+    el.title = `Roll ${label} (d20 + modifier)`;
+    el.setAttribute('aria-label', `Roll ${label}`);
+    el.addEventListener('click', () => rollModifier(card, el));
+    el.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      rollModifier(card, el);
+    });
   }
 
   function fitFieldText(el) {
@@ -126,8 +167,9 @@
     el.className = 'pdf-field' + (el.type === 'checkbox' ? ' pdf-check' : '');
     el.dataset.field = annotation.fieldName;
     el.spellcheck = false;
-    if (!canEdit) el.disabled = true;
-    if (isCalculatedField(annotation.fieldName)) el.readOnly = true;
+    const calculated = isCalculatedField(annotation.fieldName);
+    if (!canEdit && !calculated) el.disabled = true;
+    if (calculated) el.readOnly = true;
     Object.assign(el.style, {
       position: 'absolute',
       left: left + 'px',
@@ -190,6 +232,7 @@
       const el = buildWidget(a, viewport, stored, canEdit);
       layer.appendChild(el);
       fitFieldText(el);
+      if (isCalculatedField(a.fieldName)) makeRollable(card, el);
       fieldEls.set(a.fieldName, el);
 
       if (canEdit) {

@@ -432,6 +432,15 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   border: 1px solid #b48220;
   background: rgba(255, 245, 215, 0.85);
 }
+.pdf-sheet-widgets .pdf-field.pdf-roll-field {
+  cursor: pointer;
+  font-weight: bold;
+}
+.pdf-sheet-widgets .pdf-field.pdf-roll-field:hover,
+.pdf-sheet-widgets .pdf-field.pdf-roll-field:focus {
+  border-color: #7a1f1f;
+  background: rgba(255, 215, 107, 0.78);
+}
 .pdf-sheet-widgets .pdf-field.pdf-check {
   -webkit-appearance: checkbox;
   appearance: auto;
@@ -446,8 +455,20 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 }
 .pdf-sheet-wrap.readonly { filter: saturate(0.92); }
 .pdf-sheet-status {
-  padding: 12px;
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 3;
+  max-width: calc(100% - 24px);
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--gold-dark);
+  border-radius: 4px;
+  background: rgba(255, 248, 220, 0.96);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
   font-size: 0.95rem;
+  text-align: center;
+  pointer-events: none;
 }
 .pdf-sheet-status:empty {
   display: none;
