@@ -114,7 +114,8 @@
     const verticalSpace = el.clientHeight
       - parseFloat(styles.paddingTop)
       - parseFloat(styles.paddingBottom);
-    const maxSize = Math.max(4, Math.min(24, verticalSpace / 1.1));
+    const isBounty = el.dataset.field === 'bounty';
+    const maxSize = Math.max(4, Math.min(isBounty ? 96 : 24, verticalSpace / (isBounty ? 1 : 1.1)));
     let low = Math.min(4, maxSize);
     let high = maxSize;
 
@@ -154,6 +155,7 @@
       el.value = currentValue != null ? String(currentValue) : '';
     }
     el.className = 'pdf-field' + (el.type === 'checkbox' ? ' pdf-check' : '');
+    if (annotation.fieldName === 'bounty') el.classList.add('pdf-bounty-field');
     el.dataset.field = annotation.fieldName;
     el.spellcheck = false;
     const calculated = isCalculatedField(annotation.fieldName);

@@ -512,6 +512,15 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   border: 1px solid #b48220;
   background: rgba(255, 245, 215, 0.85);
 }
+.pdf-sheet-widgets .pdf-field.pdf-bounty-field {
+  padding: 0 17% 0 2%;
+  color: #17100a;
+  font-family: 'Cinzel', 'Georgia', serif;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+}
 .pdf-sheet-widgets .pdf-field.pdf-roll-field {
   cursor: pointer;
   font-weight: bold;
