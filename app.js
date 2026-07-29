@@ -149,6 +149,7 @@ function setUsername(name) {
   // After login, make sure non-GM users have their own sheet and re-render it.
   try { ensureOwnSheet(); } catch (e) { console.error(e); }
   try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
+  try { if (typeof renderLog === 'function') renderLog(); } catch (e) { console.error(e); }
 }
 
 function updateLoginUI() {
@@ -788,6 +789,18 @@ function notesPagesPerView() {
   return window.matchMedia('(max-width: 720px)').matches ? 1 : 2;
 }
 
+function playerLogKey(username) {
+  const requested = normalizeUsername(username);
+  const requestedKey = requested.toLowerCase();
+  const existing = Object.keys(state.playerNotes || {})
+    .find((name) => normalizeUsername(name).toLowerCase() === requestedKey);
+  return existing || requested;
+}
+
+function isOwnLogBook(username) {
+  return normalizeUsername(username).toLowerCase() === normalizeUsername(currentUsername).toLowerCase();
+}
+
 function renderLog() {
   if (!state.playerNotes || typeof state.playerNotes !== 'object') state.playerNotes = {};
   if (!state.playerNoteDates || typeof state.playerNoteDates !== 'object') state.playerNoteDates = {};
@@ -810,7 +823,7 @@ function renderPlayerNotes(root) {
     return;
   }
   const gm = isGmUser();
-  if (!gm) __notesViewing = currentUsername;
+  if (!gm) __notesViewing = playerLogKey(currentUsername);
   if (!__notesViewportBound) {
     __notesViewportBound = true;
     window.matchMedia('(max-width: 720px)').addEventListener('change', () => {
@@ -821,10 +834,17 @@ function renderPlayerNotes(root) {
 
   // Build the list of users who have notes; always include the current user.
   const knownUsers = Object.keys(state.playerNotes || {});
-  if (currentUsername && !knownUsers.includes(currentUsername)) knownUsers.push(currentUsername);
+  (state.playerSheets || []).forEach((sheet) => {
+    const owner = normalizeUsername(sheet?.player);
+    if (owner && !knownUsers.some((name) => normalizeUsername(name).toLowerCase() === owner.toLowerCase())) {
+      knownUsers.push(owner);
+    }
+  });
+  const currentLogKey = playerLogKey(currentUsername);
+  if (currentLogKey && !knownUsers.includes(currentLogKey)) knownUsers.push(currentLogKey);
   knownUsers.sort((a, b) => a.localeCompare(b));
 
-  if (!knownUsers.includes(__notesViewing)) __notesViewing = currentUsername;
+  if (!knownUsers.includes(__notesViewing)) __notesViewing = currentLogKey;
   const pages = notesPages(state.playerNotes[__notesViewing]);
   const pageDates = Array.isArray(state.playerNoteDates[__notesViewing])
     ? state.playerNoteDates[__notesViewing]
@@ -834,7 +854,7 @@ function renderPlayerNotes(root) {
   let pageStart = clamp(Number(__notesPageByUser[__notesViewing]) || 0, 0, maxStart);
   pageStart -= pageStart % pageStep;
   __notesPageByUser[__notesViewing] = pageStart;
-  const canEdit = gm || __notesViewing === currentUsername;
+  const canEdit = isOwnLogBook(__notesViewing);
 
   // Only rebuild the DOM when the structure changes — avoids clobbering an
   // active textarea (and losing keystrokes) when remote sync fires.
@@ -887,7 +907,7 @@ function renderPlayerNotes(root) {
 
     $$('.notes-page-text', root).forEach((textarea) => {
       textarea.addEventListener('input', () => {
-        if (!(isGmUser() || __notesViewing === currentUsername)) return;
+        if (!isOwnLogBook(__notesViewing)) return;
         const nextPages = notesPages(state.playerNotes[__notesViewing]);
         nextPages[Number(textarea.dataset.notesPage)] = textarea.value;
         state.playerNotes[__notesViewing] = nextPages.join('\f');
@@ -896,7 +916,7 @@ function renderPlayerNotes(root) {
     });
     $$('.log-book-page-date', root).forEach((dateInput) => {
       dateInput.addEventListener('input', () => {
-        if (!(isGmUser() || __notesViewing === currentUsername)) return;
+        if (!isOwnLogBook(__notesViewing)) return;
         const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
           ? [...state.playerNoteDates[__notesViewing]]
           : [];
