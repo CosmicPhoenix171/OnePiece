@@ -1994,6 +1994,28 @@ window.deleteRoute = deleteRoute;
 /* ===========================================================
    SHIP TRACKER
    =========================================================== */
+const SHIP_SUPPLY_CAPS = {
+  Dinghy: 50,
+  Sloop: 80,
+  Caravel: 150,
+  Galleon: 250,
+  "Man-o'-War": 400,
+  'Unique / Story Ship': 300,
+};
+const SHIP_SUPPLY_KEYS = ['food', 'water', 'medicine', 'ammo', 'repair'];
+
+function shipSupplyCapacity(ship = state.ship) {
+  return SHIP_SUPPLY_CAPS[ship.class] || SHIP_SUPPLY_CAPS['Unique / Story Ship'];
+}
+
+function shipSupplyTotal(ship = state.ship) {
+  return SHIP_SUPPLY_KEYS.reduce((total, key) => total + Math.max(0, Number(ship[key]) || 0), 0);
+}
+
+function formatBerries(value) {
+  return Math.max(0, Number(value) || 0).toLocaleString('en-US');
+}
+
 function bindShipFields() {
   $$('[data-ship]').forEach(el => {
     const k = el.dataset.ship;
@@ -2002,20 +2024,27 @@ function bindShipFields() {
       let v = el.value;
       if (el.type === 'number' || el.type === 'range') v = Number(v) || 0;
       if (k === 'berries') {
-        v = Math.max(0, v);
-        el.value = v;
+        v = Math.max(0, Number(String(v).replace(/[^\d]/g, '')) || 0);
       }
       if (k === 'fireDamage' || k === 'waterDamage') v = clamp(v, 0, 100);
       state.ship[k] = v;
       save(); renderShip();
     });
+    if (k === 'berries') {
+      el.addEventListener('focus', () => { el.value = String(Math.max(0, Number(state.ship.berries) || 0)); });
+      el.addEventListener('blur', () => { el.value = formatBerries(state.ship.berries); });
+    }
   });
   $$('[data-shipdelta]').forEach(b => b.addEventListener('click', () => {
     const { k, d } = JSON.parse(b.dataset.shipdelta);
     let v = (state.ship[k] || 0) + d;
     if (k === 'hull') v = clamp(v, 0, state.ship.hullMax || 9999);
     if (k === 'sails') v = clamp(v, 0, 100);
-    if (['food','water','medicine','ammo','berries','repair'].includes(k)) v = Math.max(0, v);
+    if (SHIP_SUPPLY_KEYS.includes(k)) {
+      const available = Math.max(0, shipSupplyCapacity() - shipSupplyTotal());
+      v = Math.max(0, d > 0 ? (state.ship[k] || 0) + Math.min(d, available) : v);
+    }
+    if (k === 'berries') v = Math.max(0, v);
     state.ship[k] = v;
     save(); renderShip();
   }));
@@ -2040,7 +2069,7 @@ function renderShip() {
   $('#ship-medicine').textContent = s.medicine;
   $('#ship-ammo').textContent = s.ammo;
   const berriesInput = $('#ship-berries');
-  if (berriesInput !== document.activeElement) berriesInput.value = s.berries;
+  if (berriesInput !== document.activeElement) berriesInput.value = formatBerries(s.berries);
   $('#ship-repair').textContent = s.repair;
   const hullPct = s.hullMax ? clamp((s.hull / s.hullMax) * 100, 0, 100) : 0;
   $('#hull-fill').style.width = hullPct + '%';
@@ -2051,6 +2080,20 @@ function renderShip() {
   if (waterDamage !== document.activeElement) waterDamage.value = s.waterDamage;
   $('#ship-fire-damage-value').textContent = s.fireDamage;
   $('#ship-water-damage-value').textContent = s.waterDamage;
+  const supplyTotal = shipSupplyTotal(s);
+  const supplyCapacity = shipSupplyCapacity(s);
+  const supplyOver = supplyTotal > supplyCapacity;
+  $('#ship-supply-used').textContent = supplyTotal;
+  $('#ship-supply-cap').textContent = supplyCapacity;
+  $('#ship-supply-fill').style.width = `${Math.min(100, (supplyTotal / supplyCapacity) * 100)}%`;
+  $('#ship-supply-capacity').classList.toggle('over-capacity', supplyOver);
+  $('#ship-supply-status').textContent = supplyOver
+    ? `${supplyTotal - supplyCapacity} over capacity — remove supplies before adding more.`
+    : `${supplyCapacity - supplyTotal} cargo spaces available.`;
+  $$('[data-shipdelta]').forEach((button) => {
+    const { k, d } = JSON.parse(button.dataset.shipdelta);
+    if (SHIP_SUPPLY_KEYS.includes(k) && d > 0) button.disabled = supplyTotal >= supplyCapacity;
+  });
 
   // Log
   const logRoot = $('#ship-log-list');

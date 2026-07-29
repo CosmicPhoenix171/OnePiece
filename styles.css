@@ -1412,7 +1412,7 @@ details.travel-block[open] > summary {
   width: 60px; display: inline-block; padding: 2px 4px; font-size: 0.9rem;
   margin: 0 0 0 4px;
 }
-#ship-berries { width: 110px; text-align: center; }
+#ship-berries { width: 130px; text-align: center; }
 #hull-fill { background: linear-gradient(90deg, #7a1f1f, #2a7a2a); height: 100%; transition: width 0.2s; }
 #sails-fill { background: linear-gradient(90deg, #444, #fff); height: 100%; transition: width 0.2s; }
 
@@ -1450,6 +1450,41 @@ details.travel-block[open] > summary {
   color: #6a5230;
   font-size: 0.72rem;
   font-weight: normal;
+}
+
+.ship-supply-capacity {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--gold-dark);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.35);
+}
+.ship-supply-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: #4a2a0a;
+}
+#ship-supply-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2a6d48, #d4a648);
+  transition: width 0.2s;
+}
+.ship-supply-status {
+  min-height: 1.2em;
+  margin-top: 5px;
+  color: #6a5230;
+  font-size: 0.8rem;
+}
+.ship-supply-capacity.over-capacity {
+  border-color: var(--blood);
+  background: rgba(122,31,31,0.12);
+}
+.ship-supply-capacity.over-capacity #ship-supply-fill { background: var(--blood); }
+.ship-supply-capacity.over-capacity .ship-supply-status {
+  color: var(--blood);
+  font-weight: bold;
 }
 
 .crew-card {

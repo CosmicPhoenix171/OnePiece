@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>The Devil's Ransom</title>
-<link rel="stylesheet" href="styles.css?v=9" />
+<link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
 <div id="water-damage-overlay" class="water-damage-overlay" aria-hidden="true"></div>
@@ -321,10 +321,19 @@
       </div>
 
       <h3>Supplies</h3>
+      <div id="ship-supply-capacity" class="ship-supply-capacity">
+        <div class="ship-supply-summary">
+          <strong>Total Cargo</strong>
+          <span><span id="ship-supply-used">0</span> / <span id="ship-supply-cap">0</span></span>
+        </div>
+        <div class="clock-bar"><div id="ship-supply-fill"></div></div>
+        <div id="ship-supply-status" class="ship-supply-status"></div>
+      </div>
       <div class="grid three">
         <div class="supply">
           <div class="meter-label">🍞 Food</div>
           <div class="meter-row">
+            <button data-shipdelta='{"k":"food","d":-5}'>-5</button>
             <button data-shipdelta='{"k":"food","d":-1}'>-1</button>
             <span class="meter-val"><span id="ship-food">0</span></span>
             <button data-shipdelta='{"k":"food","d":1}'>+1</button>
@@ -334,6 +343,7 @@
         <div class="supply">
           <div class="meter-label">💧 Water</div>
           <div class="meter-row">
+            <button data-shipdelta='{"k":"water","d":-5}'>-5</button>
             <button data-shipdelta='{"k":"water","d":-1}'>-1</button>
             <span class="meter-val"><span id="ship-water">0</span></span>
             <button data-shipdelta='{"k":"water","d":1}'>+1</button>
@@ -343,14 +353,17 @@
         <div class="supply">
           <div class="meter-label">💊 Medicine</div>
           <div class="meter-row">
+            <button data-shipdelta='{"k":"medicine","d":-5}'>-5</button>
             <button data-shipdelta='{"k":"medicine","d":-1}'>-1</button>
             <span class="meter-val"><span id="ship-medicine">0</span></span>
             <button data-shipdelta='{"k":"medicine","d":1}'>+1</button>
+            <button data-shipdelta='{"k":"medicine","d":5}'>+5</button>
           </div>
         </div>
         <div class="supply">
           <div class="meter-label">💣 Cannon Shot</div>
           <div class="meter-row">
+            <button data-shipdelta='{"k":"ammo","d":-5}'>-5</button>
             <button data-shipdelta='{"k":"ammo","d":-1}'>-1</button>
             <span class="meter-val"><span id="ship-ammo">0</span></span>
             <button data-shipdelta='{"k":"ammo","d":1}'>+1</button>
@@ -361,7 +374,7 @@
           <div class="meter-label">💰 Berries</div>
           <div class="meter-row">
             <button data-shipdelta='{"k":"berries","d":-100}'>-100</button>
-            <span class="meter-val"><input id="ship-berries" type="number" data-ship="berries" min="0" step="1" aria-label="Berries" /></span>
+            <span class="meter-val"><input id="ship-berries" type="text" data-ship="berries" inputmode="numeric" aria-label="Berries" /></span>
             <button data-shipdelta='{"k":"berries","d":100}'>+100</button>
             <button data-shipdelta='{"k":"berries","d":1000}'>+1k</button>
           </div>
@@ -369,9 +382,11 @@
         <div class="supply">
           <div class="meter-label">🧰 Repair Kits</div>
           <div class="meter-row">
+            <button data-shipdelta='{"k":"repair","d":-5}'>-5</button>
             <button data-shipdelta='{"k":"repair","d":-1}'>-1</button>
             <span class="meter-val"><span id="ship-repair">0</span></span>
             <button data-shipdelta='{"k":"repair","d":1}'>+1</button>
+            <button data-shipdelta='{"k":"repair","d":5}'>+5</button>
           </div>
         </div>
       </div>
@@ -418,7 +433,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="pdf-sheet.js?v=6"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=16"></script>
 <script src="map.js"></script>
 <script src="sync.js?v=2"></script>
 </body>
