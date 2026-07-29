@@ -774,6 +774,17 @@ function renderRansom() {
 const STATUSES = ['Unused','Active','Resolved','Changed by player choice','Returning later'];
 
 let __notesViewing = '';
+const __notesPageByUser = {};
+let __notesViewportBound = false;
+
+function notesPages(value) {
+  const pages = String(value || '').split('\f');
+  return pages.length ? pages : [''];
+}
+
+function notesPagesPerView() {
+  return window.matchMedia('(max-width: 720px)').matches ? 1 : 2;
+}
 
 function renderLog() {
   if (!state.playerNotes || typeof state.playerNotes !== 'object') state.playerNotes = {};
@@ -797,6 +808,13 @@ function renderPlayerNotes(root) {
   }
   const gm = isGmUser();
   if (!gm) __notesViewing = currentUsername;
+  if (!__notesViewportBound) {
+    __notesViewportBound = true;
+    window.matchMedia('(max-width: 720px)').addEventListener('change', () => {
+      root.dataset.notesSig = '';
+      renderPlayerNotes(root);
+    });
+  }
 
   // Build the list of users who have notes; always include the current user.
   const knownUsers = Object.keys(state.playerNotes || {});
@@ -804,10 +822,17 @@ function renderPlayerNotes(root) {
   knownUsers.sort((a, b) => a.localeCompare(b));
 
   if (!knownUsers.includes(__notesViewing)) __notesViewing = currentUsername;
+  const pages = notesPages(state.playerNotes[__notesViewing]);
+  const pageStep = notesPagesPerView();
+  const maxStart = Math.max(0, pages.length - 1);
+  let pageStart = clamp(Number(__notesPageByUser[__notesViewing]) || 0, 0, maxStart);
+  pageStart -= pageStart % pageStep;
+  __notesPageByUser[__notesViewing] = pageStart;
+  const canEdit = gm || __notesViewing === currentUsername;
 
   // Only rebuild the DOM when the structure changes — avoids clobbering an
   // active textarea (and losing keystrokes) when remote sync fires.
-  const signature = `${gm ? 'gm' : 'pc'}|${currentUsername}|${knownUsers.join(',')}|${__notesViewing}`;
+  const signature = `${gm ? 'gm' : 'pc'}|${currentUsername}|${knownUsers.join(',')}|${__notesViewing}|${pageStart}|${pages.length}|${pageStep}`;
   if (root.dataset.notesSig !== signature) {
     root.dataset.notesSig = signature;
     const selectorHtml = gm
@@ -819,11 +844,30 @@ function renderPlayerNotes(root) {
          </label>`
       : '';
 
+    const pageHtml = [pageStart, pageStart + 1].map((pageIndex, side) => `
+      <section class="log-book-page log-book-page-${side ? 'right' : 'left'} ${pageIndex >= pages.length ? 'log-book-page-blank' : ''}" data-book-page="${pageIndex}" ${pageIndex >= pages.length ? 'aria-hidden="true"' : ''}>
+        <div class="log-book-page-heading">${pageIndex === 0 ? 'Personal Log' : 'Continued'}</div>
+        <textarea class="notes-page-text" data-notes-page="${pageIndex}"
+          aria-label="Personal Log page ${pageIndex + 1}"
+          placeholder="Set down the day’s course, discoveries, and promises…"
+          ${pageIndex >= pages.length ? 'disabled' : (canEdit ? '' : 'readonly')}>${esc(pages[pageIndex] || '')}</textarea>
+        <span class="log-book-page-number">${pageIndex < pages.length ? pageIndex + 1 : ''}</span>
+      </section>`).join('');
+
     root.innerHTML = `
-      ${selectorHtml}
-      <textarea id="notes-textarea" rows="18"
-        placeholder="Personal log entries — only you (and the GM) can read these."></textarea>
-    `;
+      <div class="log-book-toolbar">
+        ${selectorHtml}
+        <div class="log-book-actions">
+          <button type="button" data-book-action="previous" aria-label="Previous pages" title="Previous pages" ${pageStart === 0 ? 'disabled' : ''}>←</button>
+          <span class="log-book-position">${pageStart + 1}${pageStep === 2 && pageStart + 1 < pages.length ? `–${Math.min(pageStart + 2, pages.length)}` : ''} of ${pages.length}</span>
+          <button type="button" data-book-action="next" aria-label="Next pages" title="Next pages" ${pageStart + pageStep >= pages.length ? 'disabled' : ''}>→</button>
+          ${canEdit ? '<button type="button" data-book-action="add" title="Add page">+ Page</button>' : ''}
+          ${canEdit ? `<button type="button" data-book-action="delete" class="danger" title="Delete current page" ${pages.length === 1 ? 'disabled' : ''}>Delete page</button>` : ''}
+        </div>
+      </div>
+      <div class="log-book" aria-label="Personal Log book">
+        <div class="log-book-spread">${pageHtml}</div>
+      </div>`;
 
     const sel = $('#notes-user-select', root);
     if (sel) sel.addEventListener('change', () => {
@@ -831,25 +875,47 @@ function renderPlayerNotes(root) {
       renderPlayerNotes(root);
     });
 
-    const ta = $('#notes-textarea', root);
-    if (ta) {
-      ta.addEventListener('input', () => {
-        const canEdit = isGmUser() || __notesViewing === currentUsername;
-        if (!canEdit) return;
-        state.playerNotes[__notesViewing] = ta.value;
+    $$('.notes-page-text', root).forEach((textarea) => {
+      textarea.addEventListener('input', () => {
+        if (!(isGmUser() || __notesViewing === currentUsername)) return;
+        const nextPages = notesPages(state.playerNotes[__notesViewing]);
+        nextPages[Number(textarea.dataset.notesPage)] = textarea.value;
+        state.playerNotes[__notesViewing] = nextPages.join('\f');
         save();
       });
-    }
+    });
+
+    $$('[data-book-action]', root).forEach((button) => button.addEventListener('click', () => {
+      const action = button.dataset.bookAction;
+      const step = notesPagesPerView();
+      if (action === 'previous') __notesPageByUser[__notesViewing] = Math.max(0, pageStart - step);
+      if (action === 'next') __notesPageByUser[__notesViewing] = Math.min(pages.length - 1, pageStart + step);
+      if (action === 'add' && canEdit) {
+        const nextPages = notesPages(state.playerNotes[__notesViewing]);
+        nextPages.push('');
+        state.playerNotes[__notesViewing] = nextPages.join('\f');
+        __notesPageByUser[__notesViewing] = nextPages.length - 1;
+        save();
+      }
+      if (action === 'delete' && canEdit && pages.length > 1) {
+        const nextPages = notesPages(state.playerNotes[__notesViewing]);
+        nextPages.splice(pageStart, 1);
+        state.playerNotes[__notesViewing] = nextPages.join('\f');
+        __notesPageByUser[__notesViewing] = Math.min(pageStart, nextPages.length - 1);
+        save();
+      }
+      root.dataset.notesSig = '';
+      renderPlayerNotes(root);
+      $('.notes-page-text', root)?.focus();
+    }));
   }
 
   // Sync content + edit-state without touching the user's cursor.
-  const ta = $('#notes-textarea', root);
-  if (ta) {
-    const value = state.playerNotes[__notesViewing] || '';
-    if (document.activeElement !== ta && ta.value !== value) ta.value = value;
-    const canEdit = gm || __notesViewing === currentUsername;
-    ta.readOnly = !canEdit;
-  }
+  $$('.notes-page-text', root).forEach((textarea) => {
+    const value = pages[Number(textarea.dataset.notesPage)] || '';
+    if (document.activeElement !== textarea && textarea.value !== value) textarea.value = value;
+    textarea.readOnly = !canEdit;
+  });
 }
 
 function renderEncounterArchive() {

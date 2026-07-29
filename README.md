@@ -15,7 +15,7 @@ For best results, keep the same browser/profile so the local save stays availabl
 2. **Map** — Full-screen world map with click-to-place markers (port, island, danger, treasure, ransom, ship). Drag to reposition, click to edit, with notes per marker. **Sea Travel lives here as a side panel** — create routes manually or by clicking two markers (🧭 Route from 2 Markers). Active routes draw a dashed line between their start and destination markers, and a ship glyph slides along the line as Travel Days progress.
 3. **Ship Tracker** — Hull HP, sails condition, morale, food/water/medicine/cannon shot/berries/repair kits, crew roster with HP & conditions, and a damage/event log.
 4. **Player Sheets** — Shared player character cards with level, bounty, HP, Devil Fruit, and notes.
-5. **Captain's Log** — Each player gets a private notes area that auto-saves and syncs with the GM. Below it, the GM also sees the encounter archive (saved encounter records with status, notes, and export controls).
+5. **Personal Log** — Each player gets a private notes area that auto-saves and syncs with the GM. Below it, the GM also sees the encounter archive (saved encounter records with status, notes, and export controls).
 
 ## Simple login (username only)
 
