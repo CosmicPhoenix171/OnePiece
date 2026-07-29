@@ -803,7 +803,7 @@ function renderLog() {
 
 function renderPlayerNotes(root) {
   if (!currentUsername) {
-    root.innerHTML = '<p class="muted">Log in to write personal log entries.</p>';
+    root.innerHTML = '<p class="muted">Log in to write in your log book.</p>';
     root.dataset.notesSig = '';
     return;
   }
@@ -847,9 +847,9 @@ function renderPlayerNotes(root) {
 
     const pageHtml = [pageStart, pageStart + 1].map((pageIndex, side) => `
       <section class="log-book-page log-book-page-${side ? 'right' : 'left'} ${pageIndex >= pages.length ? 'log-book-page-blank' : ''}" data-book-page="${pageIndex}" ${pageIndex >= pages.length ? 'aria-hidden="true"' : ''}>
-        <div class="log-book-page-heading">${pageIndex === 0 ? 'Personal Log' : 'Continued'}</div>
+        <div class="log-book-page-heading">${pageIndex === 0 ? 'Log Book' : 'Continued'}</div>
         <textarea class="notes-page-text" data-notes-page="${pageIndex}"
-          aria-label="Personal Log page ${pageIndex + 1}"
+          aria-label="Log Book page ${pageIndex + 1}"
           placeholder="Set down the day’s course, discoveries, and promises…"
           ${pageIndex >= pages.length ? 'disabled' : (canEdit ? '' : 'readonly')}>${esc(pages[pageIndex] || '')}</textarea>
         <span class="log-book-page-number">${pageIndex < pages.length ? pageIndex + 1 : ''}</span>
@@ -866,7 +866,7 @@ function renderPlayerNotes(root) {
           ${canEdit ? `<button type="button" data-book-action="delete" class="danger" title="Delete current page" ${pages.length === 1 ? 'disabled' : ''}>Delete page</button>` : ''}
         </div>
       </div>
-      <div class="log-book" aria-label="Personal Log book">
+      <div class="log-book" aria-label="Log Book">
         <div class="log-book-spread">${pageHtml}</div>
       </div>`;
 

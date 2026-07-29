@@ -343,7 +343,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 .log-entry .status { font-size: 0.85rem; }
 .log-entry textarea { width: 100%; }
 
-/* Personal Log — player notes area */
+/* Log Book — player notes area */
 #notes-area {
   display: flex;
   flex-direction: column;
