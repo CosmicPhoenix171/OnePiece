@@ -57,6 +57,7 @@ const DEFAULT_STATE = {
   },
   playerSheets: [],
   playerNotes: {},
+  playerNoteDates: {},
   mapMarkers: [],
   mapImageData: '',
   mapImageName: '',
@@ -789,6 +790,7 @@ function notesPagesPerView() {
 
 function renderLog() {
   if (!state.playerNotes || typeof state.playerNotes !== 'object') state.playerNotes = {};
+  if (!state.playerNoteDates || typeof state.playerNoteDates !== 'object') state.playerNoteDates = {};
 
   // Player notes (everyone) — only this user can read their own notes; GM can read all.
   const notesRoot = $('#notes-area');
@@ -824,6 +826,9 @@ function renderPlayerNotes(root) {
 
   if (!knownUsers.includes(__notesViewing)) __notesViewing = currentUsername;
   const pages = notesPages(state.playerNotes[__notesViewing]);
+  const pageDates = Array.isArray(state.playerNoteDates[__notesViewing])
+    ? state.playerNoteDates[__notesViewing]
+    : [];
   const pageStep = notesPagesPerView();
   const maxStart = Math.max(0, pages.length - 1);
   let pageStart = clamp(Number(__notesPageByUser[__notesViewing]) || 0, 0, maxStart);
@@ -847,7 +852,11 @@ function renderPlayerNotes(root) {
 
     const pageHtml = [pageStart, pageStart + 1].map((pageIndex, side) => `
       <section class="log-book-page log-book-page-${side ? 'right' : 'left'} ${pageIndex >= pages.length ? 'log-book-page-blank' : ''}" data-book-page="${pageIndex}" ${pageIndex >= pages.length ? 'aria-hidden="true"' : ''}>
-        <div class="log-book-page-heading">${pageIndex === 0 ? 'Log Book' : 'Continued'}</div>
+        ${pageIndex === 0
+          ? '<div class="log-book-page-heading">Log Book</div>'
+            : `<input class="log-book-page-date" type="text" data-notes-date="${pageIndex}"
+              aria-label="Heading for Log Book page ${pageIndex + 1}" value="${esc(pageDates[pageIndex] || '')}"
+              ${pageIndex >= pages.length ? 'disabled' : (canEdit ? '' : 'readonly')} />`}
         <textarea class="notes-page-text" data-notes-page="${pageIndex}"
           aria-label="Log Book page ${pageIndex + 1}"
           placeholder="Set down the day’s course, discoveries, and promises…"
@@ -885,6 +894,17 @@ function renderPlayerNotes(root) {
         save();
       });
     });
+    $$('.log-book-page-date', root).forEach((dateInput) => {
+      dateInput.addEventListener('input', () => {
+        if (!(isGmUser() || __notesViewing === currentUsername)) return;
+        const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
+          ? [...state.playerNoteDates[__notesViewing]]
+          : [];
+        nextDates[Number(dateInput.dataset.notesDate)] = dateInput.value;
+        state.playerNoteDates[__notesViewing] = nextDates;
+        save();
+      });
+    });
 
     $$('[data-book-action]', root).forEach((button) => button.addEventListener('click', () => {
       const action = button.dataset.bookAction;
@@ -895,6 +915,11 @@ function renderPlayerNotes(root) {
         const nextPages = notesPages(state.playerNotes[__notesViewing]);
         nextPages.push('');
         state.playerNotes[__notesViewing] = nextPages.join('\f');
+        const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
+          ? [...state.playerNoteDates[__notesViewing]]
+          : [];
+        nextDates.push('');
+        state.playerNoteDates[__notesViewing] = nextDates;
         __notesPageByUser[__notesViewing] = nextPages.length - 1;
         save();
       }
@@ -902,6 +927,11 @@ function renderPlayerNotes(root) {
         const nextPages = notesPages(state.playerNotes[__notesViewing]);
         nextPages.splice(pageStart, 1);
         state.playerNotes[__notesViewing] = nextPages.join('\f');
+        const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
+          ? [...state.playerNoteDates[__notesViewing]]
+          : [];
+        nextDates.splice(pageStart, 1);
+        state.playerNoteDates[__notesViewing] = nextDates;
         __notesPageByUser[__notesViewing] = Math.min(pageStart, nextPages.length - 1);
         save();
       }
@@ -916,6 +946,11 @@ function renderPlayerNotes(root) {
     const value = pages[Number(textarea.dataset.notesPage)] || '';
     if (document.activeElement !== textarea && textarea.value !== value) textarea.value = value;
     textarea.readOnly = !canEdit;
+  });
+  $$('.log-book-page-date', root).forEach((dateInput) => {
+    const value = pageDates[Number(dateInput.dataset.notesDate)] || '';
+    if (document.activeElement !== dateInput && dateInput.value !== value) dateInput.value = value;
+    dateInput.readOnly = !canEdit;
   });
 }
 
