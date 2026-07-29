@@ -14,7 +14,6 @@
    =========================================================== */
 (function () {
   const PDF_URL = 'assets/Wanted_Character_Sheet_Form_Fillable (4).pdf';
-  const PREVIEW_URL = 'assets/Wanted_Character_Sheet_Form_Fillable_4_preview.jpg';
   const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const MAX_BITMAP_WIDTH = 1224;
   const CALCULATED_FIELDS = new Set([
@@ -24,6 +23,7 @@
     'intelligence_mod',
     'wisdom_mod',
     'charisma_mod',
+    'passive_perception',
   ]);
 
   function isCalculatedField(fieldName) {
@@ -39,7 +39,6 @@
   // --- module-level caches ----------------------------------------------------
   let _pdfBytesPromise = null; // ArrayBuffer of the source PDF (for pdf-lib too)
   let _pdfDocPromise = null;   // pdf.js PDFDocumentProxy
-  let _previewPromise = null;  // Fast raster background for the heavy source artwork
   let _rollResultTimer = null;
   const _mounts = new Map();   // sheetId -> { card, sheet, onChange, canEdit, fields: Map<name, el> }
 
@@ -61,16 +60,6 @@
       );
     }
     return _pdfDocPromise;
-  }
-
-  function loadPreview() {
-    if (!_previewPromise) {
-      _previewPromise = fetch(PREVIEW_URL).then((response) => {
-        if (!response.ok) throw new Error('Failed to fetch PDF preview: ' + response.status);
-        return response.blob();
-      }).then((blob) => createImageBitmap(blob));
-    }
-    return _previewPromise;
   }
 
   function setStatus(card, text) {
@@ -218,8 +207,11 @@
 
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const preview = await loadPreview();
-    ctx.drawImage(preview, 0, 0, viewport.width, viewport.height);
+    await page.render({
+      canvasContext: ctx,
+      viewport,
+      annotationMode: pdfjsLib.AnnotationMode.DISABLE,
+    }).promise;
 
     // Build widgets from the annotations.
     layer.innerHTML = '';
@@ -232,7 +224,7 @@
       const el = buildWidget(a, viewport, stored, canEdit);
       layer.appendChild(el);
       fitFieldText(el);
-      if (isCalculatedField(a.fieldName)) makeRollable(card, el);
+      if (isCalculatedField(a.fieldName) && a.fieldName !== 'passive_perception') makeRollable(card, el);
       fieldEls.set(a.fieldName, el);
 
       if (canEdit) {

@@ -965,7 +965,7 @@ const PDF_ABILITY_MOD_FIELDS = {
 const PDF_SKILL_ABILITIES = {
   acrobatics: 'dexterity',
   animal_handling: 'wisdom',
-  arcana: 'intelligence',
+  devil_fruit_lore: 'intelligence',
   athletics: 'strength',
   deception: 'charisma',
   history: 'intelligence',
@@ -973,11 +973,11 @@ const PDF_SKILL_ABILITIES = {
   intimidation: 'charisma',
   investigation: 'intelligence',
   medicine: 'wisdom',
-  nature: 'intelligence',
+  navigation: 'intelligence',
   perception: 'wisdom',
   performance: 'charisma',
   persuasion: 'charisma',
-  religion: 'intelligence',
+  shipwright: 'intelligence',
   sleight_of_hand: 'dexterity',
   stealth: 'dexterity',
   survival: 'wisdom',
@@ -1016,6 +1016,12 @@ function updatePdfSkillModifiers(fields, changedField) {
     const proficient = Boolean(fields[`skill_${skill}_proficient`]);
     fields[modifierField] = fmtMod(statMod(score) + (proficient ? 5 : 0));
   });
+  const perceptionModifier = Number(fields.skill_perception_modifier);
+  if (Number.isFinite(perceptionModifier)) {
+    fields.passive_perception = String(10 + perceptionModifier);
+  } else {
+    delete fields.passive_perception;
+  }
   return true;
 }
 function sectionHp(maxHp) { return Math.max(1, Math.ceil((Number(maxHp) || 6) / 6)); }
