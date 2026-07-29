@@ -4,9 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>The Devil's Ransom</title>
-<link rel="stylesheet" href="styles.css?v=8" />
+<link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
+<div id="water-damage-overlay" class="water-damage-overlay" aria-hidden="true"></div>
 <header class="topbar">
   <h1>🏴‍☠️ The Devil's Ransom</h1>
   <div class="userbar">
@@ -276,8 +277,7 @@
             <option>Unique / Story Ship</option>
           </select>
         </label>
-        <label>Captain<input type="text" data-ship="captain" /></label>
-        <label>Flag Description<input type="text" data-ship="flag" /></label>
+        <label class="full">Flag Description<input type="text" data-ship="flag" /></label>
       </div>
 
       <h3>Hull &amp; Sails</h3>
@@ -304,15 +304,20 @@
           </div>
           <div class="clock-bar"><div id="sails-fill"></div></div>
         </div>
-        <div class="ship-meter">
-          <div class="meter-label">Morale (1–10)</div>
-          <div class="meter-row">
-            <button data-shipdelta='{"k":"morale","d":-1}'>-1</button>
-            <span class="meter-val"><span id="ship-morale">5</span> / 10</span>
-            <button data-shipdelta='{"k":"morale","d":1}'>+1</button>
-          </div>
-          <div class="clock-bar"><div id="morale-fill"></div></div>
-        </div>
+      </div>
+
+      <h3>Damage Control</h3>
+      <div class="grid two ship-damage-grid">
+        <label class="ship-damage-slider fire-damage">Fire Damage
+          <span class="ship-damage-value"><output id="ship-fire-damage-value">0</output>%</span>
+          <input id="ship-fire-damage" type="range" data-ship="fireDamage" min="0" max="100" step="1" value="0" />
+          <span class="ship-damage-scale"><span>Clear</span><span>Inferno</span></span>
+        </label>
+        <label class="ship-damage-slider water-damage">Water Damage
+          <span class="ship-damage-value"><output id="ship-water-damage-value">0</output>%</span>
+          <input id="ship-water-damage" type="range" data-ship="waterDamage" min="0" max="100" step="1" value="0" />
+          <span class="ship-damage-scale"><span>Dry</span><span>Flooded</span></span>
+        </label>
       </div>
 
       <h3>Supplies</h3>
@@ -371,10 +376,6 @@
         </div>
       </div>
 
-      <h3>Crew Roster</h3>
-      <div id="crew-list"></div>
-      <div class="btn-row"><button class="gold" data-action="addCrew">+ Add Crew Member</button></div>
-
       <h3>Damage / Event Log</h3>
       <div class="btn-row">
         <input type="text" id="ship-log-input" class="grow" placeholder="e.g. Took 8 hull from storm" />
@@ -417,7 +418,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="pdf-sheet.js?v=6"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=13"></script>
 <script src="map.js"></script>
 <script src="sync.js?v=2"></script>
 </body>

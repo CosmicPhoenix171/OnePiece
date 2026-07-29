@@ -49,6 +49,8 @@ const DEFAULT_STATE = {
     hull: 40, hullMax: 40,
     sails: 100,
     morale: 6,
+    fireDamage: 0,
+    waterDamage: 0,
     food: 20, water: 20, medicine: 4, ammo: 15, berries: 500, repair: 2,
     crew: [],
     log: []
@@ -314,7 +316,6 @@ document.addEventListener('click', e => {
     case 'cancelNewRoute': showNewRouteForm(false); break;
     case 'createRoute':    createRouteFromForm(); break;
     case 'loadRouteTemplate': loadRouteTemplate(); break;
-    case 'addCrew':        addCrewMember(); break;
     case 'addShipLog':     addShipLogEntry(); break;
     case 'importMap':      importMapImage(); break;
     case 'resetMapImage':  if (confirm('Remove the current map image?')) { state.mapImageData = ''; state.mapImageName = ''; save(); renderMap(); } break;
@@ -1787,7 +1788,7 @@ function nextTravelDay() {
   if (!r || r.status !== 'active') return;
   r.currentDay += 1;
   // Daily food/water consumption based on crew count (min 1)
-  const crewCount = Math.max(1, state.ship.crew.length || state.partySize || 4);
+  const crewCount = Math.max(1, Number(state.partySize) || 4);
   state.ship.food = Math.max(0, state.ship.food - crewCount);
   state.ship.water = Math.max(0, state.ship.water - crewCount);
   r.log.push({
@@ -1999,11 +2000,12 @@ function bindShipFields() {
     if (state.ship[k] !== undefined) el.value = state.ship[k];
     el.addEventListener('input', () => {
       let v = el.value;
-      if (el.type === 'number') v = Number(v) || 0;
+      if (el.type === 'number' || el.type === 'range') v = Number(v) || 0;
       if (k === 'berries') {
         v = Math.max(0, v);
         el.value = v;
       }
+      if (k === 'fireDamage' || k === 'waterDamage') v = clamp(v, 0, 100);
       state.ship[k] = v;
       save(); renderShip();
     });
@@ -2013,7 +2015,6 @@ function bindShipFields() {
     let v = (state.ship[k] || 0) + d;
     if (k === 'hull') v = clamp(v, 0, state.ship.hullMax || 9999);
     if (k === 'sails') v = clamp(v, 0, 100);
-    if (k === 'morale') v = clamp(v, 0, 10);
     if (['food','water','medicine','ammo','berries','repair'].includes(k)) v = Math.max(0, v);
     state.ship[k] = v;
     save(); renderShip();
@@ -2024,9 +2025,16 @@ function renderShip() {
   const s = state.ship;
   if (!Array.isArray(s.crew)) s.crew = [];
   if (!Array.isArray(s.log)) s.log = [];
+  s.fireDamage = clamp(Number(s.fireDamage) || 0, 0, 100);
+  s.waterDamage = clamp(Number(s.waterDamage) || 0, 0, 100);
+  const waterOverlay = $('#water-damage-overlay');
+  if (waterOverlay) {
+    waterOverlay.style.height = `${s.waterDamage}vh`;
+    waterOverlay.style.opacity = s.waterDamage > 0 ? String(0.32 + (s.waterDamage * 0.0025)) : '0';
+    waterOverlay.classList.toggle('active', s.waterDamage > 0);
+  }
   $('#ship-hull').textContent = s.hull;
   $('#ship-sails').textContent = s.sails;
-  $('#ship-morale').textContent = s.morale;
   $('#ship-food').textContent = s.food;
   $('#ship-water').textContent = s.water;
   $('#ship-medicine').textContent = s.medicine;
@@ -2037,40 +2045,12 @@ function renderShip() {
   const hullPct = s.hullMax ? clamp((s.hull / s.hullMax) * 100, 0, 100) : 0;
   $('#hull-fill').style.width = hullPct + '%';
   $('#sails-fill').style.width = clamp(s.sails, 0, 100) + '%';
-  $('#morale-fill').style.width = clamp(s.morale * 10, 0, 100) + '%';
-
-  // Crew
-  const crewRoot = $('#crew-list');
-  if (!s.crew.length) crewRoot.innerHTML = '<p class="muted">No crew added yet.</p>';
-  else {
-    crewRoot.innerHTML = s.crew.map((c, i) => `
-      <div class="crew-card" data-i="${i}">
-        <div class="grid two">
-          <label>Name<input data-cf="name" value="${esc(c.name)}" /></label>
-          <label>Role<input data-cf="role" value="${esc(c.role)}" /></label>
-          <label>HP <input type="number" data-cf="hp" value="${c.hp}" /></label>
-          <label>Max HP <input type="number" data-cf="maxHp" value="${c.maxHp}" /></label>
-          <label class="full">Status / Conditions<input data-cf="status" value="${esc(c.status)}" /></label>
-          <label class="full">Notes<textarea data-cf="notes" rows="2">${esc(c.notes)}</textarea></label>
-        </div>
-        <div class="row-end"><button class="danger" data-ca="del">Remove</button></div>
-      </div>`).join('');
-    $$('#crew-list .crew-card').forEach(card => {
-      const i = Number(card.dataset.i);
-      $$('[data-cf]', card).forEach(el => {
-        el.addEventListener('input', () => {
-          const k = el.dataset.cf;
-          state.ship.crew[i][k] = el.type === 'number' ? (Number(el.value) || 0) : el.value;
-          save();
-        });
-      });
-      $('[data-ca="del"]', card).addEventListener('click', () => {
-        if (confirm('Remove this crew member?')) {
-          state.ship.crew.splice(i,1); save(); renderShip();
-        }
-      });
-    });
-  }
+  const fireDamage = $('#ship-fire-damage');
+  const waterDamage = $('#ship-water-damage');
+  if (fireDamage !== document.activeElement) fireDamage.value = s.fireDamage;
+  if (waterDamage !== document.activeElement) waterDamage.value = s.waterDamage;
+  $('#ship-fire-damage-value').textContent = s.fireDamage;
+  $('#ship-water-damage-value').textContent = s.waterDamage;
 
   // Log
   const logRoot = $('#ship-log-list');
@@ -2089,13 +2069,6 @@ function renderShip() {
       state.ship.log.splice(Number(b.dataset.lidx), 1); save(); renderShip();
     }));
   }
-}
-
-function addCrewMember() {
-  state.ship.crew.push({
-    name: 'New Crew', role: '', hp: 20, maxHp: 20, status: '', notes: ''
-  });
-  save(); renderShip();
 }
 
 function addShipLogEntry() {

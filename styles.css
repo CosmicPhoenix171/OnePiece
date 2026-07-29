@@ -27,6 +27,57 @@ body {
   line-height: 1.45;
 }
 
+.water-damage-overlay {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 80;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 14% 78%, rgba(210, 246, 255, 0.35) 0 3px, transparent 4px),
+    radial-gradient(circle at 72% 64%, rgba(210, 246, 255, 0.28) 0 5px, transparent 6px),
+    radial-gradient(circle at 42% 88%, rgba(210, 246, 255, 0.22) 0 4px, transparent 5px),
+    linear-gradient(180deg, rgba(25, 148, 188, 0.7), rgba(4, 57, 96, 0.94));
+  background-size: 190px 220px, 270px 310px, 230px 260px, 100% 100%;
+  box-shadow: inset 0 14px 30px rgba(173, 235, 246, 0.2);
+  transition: height 0.45s ease, opacity 0.3s ease;
+}
+.water-damage-overlay::before,
+.water-damage-overlay::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+}
+.water-damage-overlay::before {
+  top: -14px;
+  height: 18px;
+  background:
+    radial-gradient(ellipse at 25px 16px, rgba(115, 215, 239, 0.95) 0 16px, transparent 17px) 0 0 / 80px 18px repeat-x;
+  animation: waterline-drift 3.2s linear infinite;
+}
+.water-damage-overlay::after {
+  top: 0;
+  height: 6px;
+  background: rgba(205, 245, 252, 0.42);
+  box-shadow: 0 3px 10px rgba(166, 233, 247, 0.55);
+}
+.water-damage-overlay:not(.active)::before,
+.water-damage-overlay:not(.active)::after { display: none; }
+@keyframes waterline-drift {
+  from { background-position-x: 0; }
+  to { background-position-x: 80px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .water-damage-overlay { transition: none; }
+  .water-damage-overlay::before { animation: none; }
+}
+
 .topbar {
   padding: 18px 24px 8px;
   text-align: center;
@@ -1364,7 +1415,42 @@ details.travel-block[open] > summary {
 #ship-berries { width: 110px; text-align: center; }
 #hull-fill { background: linear-gradient(90deg, #7a1f1f, #2a7a2a); height: 100%; transition: width 0.2s; }
 #sails-fill { background: linear-gradient(90deg, #444, #fff); height: 100%; transition: width 0.2s; }
-#morale-fill { background: linear-gradient(90deg, #5a1010, #f5c75a); height: 100%; transition: width 0.2s; }
+
+.ship-damage-slider {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 12px;
+  border: 1px solid var(--gold-dark);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.35);
+  color: #4a2a0a;
+  font-size: 1rem;
+}
+.ship-damage-value {
+  font-size: 1.2rem;
+  color: var(--ink);
+}
+.ship-damage-slider input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.ship-damage-slider.fire-damage input[type="range"] { accent-color: #b9341d; }
+.ship-damage-slider.water-damage input[type="range"] { accent-color: #176d91; }
+.ship-damage-scale {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  color: #6a5230;
+  font-size: 0.72rem;
+  font-weight: normal;
+}
 
 .crew-card {
   background: rgba(255,255,255,0.4);
