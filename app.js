@@ -396,6 +396,22 @@ function diceColorHex(preferences = currentDicePreferences()) {
   return `#${['r', 'g', 'b'].map((key) => Math.round(preferences[key]).toString(16).padStart(2, '0')).join('')}`;
 }
 
+function rollPlayerDice(sides = 20) {
+  const preferences = currentDicePreferences();
+  const first = roll(sides);
+  const useSecond = preferences.advantage || preferences.disadvantage;
+  const second = useSecond ? roll(sides) : null;
+  const die = preferences.advantage ? Math.max(first, second)
+    : preferences.disadvantage ? Math.min(first, second)
+    : first;
+  return {
+    die,
+    rolls: useSecond ? [first, second] : [first],
+    mode: preferences.advantage ? 'Advantage' : preferences.disadvantage ? 'Disadvantage' : ''
+  };
+}
+window.rollPlayerDice = rollPlayerDice;
+
 function makeD10Geometry() {
   const positions = [];
   const ring = Array.from({ length: 5 }, (_, index) => {
@@ -704,7 +720,7 @@ function renderRollLog() {
     const modifier = Number(entry.modifier) || 0;
     const expression = entry.die
       ? entry.rolls?.length > 1
-        ? `d${Number(entry.sides) || 20} rolls: ${entry.rolls.map(Number).join(', ')} → kept ${Number(entry.die)}`
+        ? `d${Number(entry.sides) || 20} rolls: ${entry.rolls.map(Number).join(', ')} → kept ${Number(entry.die)}${modifier ? ` ${modifier >= 0 ? '+' : '-'} ${Math.abs(modifier)} = ${Number(entry.total) || 0}` : ''}`
         : `d${Number(entry.sides) || 20} (${Number(entry.die)})${modifier ? ` ${modifier >= 0 ? '+' : '-'} ${Math.abs(modifier)}` : ''} = ${Number(entry.total) || 0}`
       : entry.detail;
     const identity = entry.character && entry.character !== entry.roller
@@ -1874,20 +1890,11 @@ function renderPlayerSheets() {
       sharedReferences.querySelectorAll('[data-die-sides]').forEach((button) => {
         button.addEventListener('click', () => {
           const sides = Number(button.dataset.dieSides);
-          const preferences = currentDicePreferences();
-          const first = roll(sides);
-          const useSecond = preferences.advantage || preferences.disadvantage;
-          const second = useSecond ? roll(sides) : null;
-          const die = preferences.advantage ? Math.max(first, second)
-            : preferences.disadvantage ? Math.min(first, second)
-            : first;
-          const mode = preferences.advantage ? 'Advantage'
-            : preferences.disadvantage ? 'Disadvantage'
-            : '';
+          const outcome = rollPlayerDice(sides);
+          const { die, rolls, mode } = outcome;
           const activeSheet = state.playerSheets.find((sheet) => sheet.id === root.dataset.activeSheetId);
           const character = activeSheet?.name || activeSheet?.player || '';
-          const rollDetail = useSecond ? `${first}, ${second} → kept ${die}` : '';
-          const rolls = useSecond ? [first, second] : [first];
+          const rollDetail = rolls.length > 1 ? `${rolls.join(', ')} → kept ${die}` : '';
           showDiceRoll({ sides, die, rolls, total: die, label: mode || 'Custom', rollDetail });
           recordRoll({
             label: mode ? `${mode} d${sides}` : `Custom d${sides}`,

@@ -81,24 +81,43 @@
       setStatus(card, `Enter an ability score before rolling ${rollLabel(el.dataset.field)}.`);
       return;
     }
-    const die = Math.floor(Math.random() * 20) + 1;
+    const outcome = typeof window.rollPlayerDice === 'function'
+      ? window.rollPlayerDice(20)
+      : { die: Math.floor(Math.random() * 20) + 1, rolls: [], mode: '' };
+    const { die, rolls, mode } = outcome;
     const total = die + modifier;
     const signedModifier = modifier >= 0 ? `+ ${modifier}` : `- ${Math.abs(modifier)}`;
+    const dualRoll = rolls.length > 1;
+    const rollDetail = dualRoll
+      ? `${rolls.join(', ')} → kept ${die}; ${die} ${signedModifier} = ${total}`
+      : '';
+    const label = rollLabel(el.dataset.field);
     const status = card.querySelector('.pdf-sheet-status');
     if (status) {
       status.style.left = `${el.offsetLeft + (el.offsetWidth / 2)}px`;
       status.style.top = `${Math.max(8, el.offsetTop - 42)}px`;
     }
-    setStatus(card, `${rollLabel(el.dataset.field)}: d20 ${die} ${signedModifier} = ${total}`);
+    setStatus(card, dualRoll
+      ? `${label} (${mode}): d20 ${rollDetail}`
+      : `${label}: d20 ${die} ${signedModifier} = ${total}`);
     if (typeof window.showDiceRoll === 'function') {
-      window.showDiceRoll({ sides: 20, die, modifier, total, label: rollLabel(el.dataset.field) });
+      window.showDiceRoll({
+        sides: 20,
+        die,
+        rolls,
+        modifier,
+        total,
+        label: mode ? `${label} · ${mode}` : label,
+        rollDetail
+      });
     }
     if (typeof window.recordRoll === 'function') {
       window.recordRoll({
-        label: rollLabel(el.dataset.field),
+        label: mode ? `${label} · ${mode}` : label,
         character: sheet.name || sheet.player || '',
         sides: 20,
         die,
+        rolls,
         modifier,
         total
       });
