@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>The Devil's Ransom</title>
-<link rel="stylesheet" href="styles.css?v=15" />
+<link rel="stylesheet" href="styles.css?v=16" />
 </head>
 <body>
 <div id="water-damage-overlay" class="water-damage-overlay" aria-hidden="true"></div>
@@ -32,6 +32,7 @@
   <button class="tab active" data-tab="map">Map</button>
   <button class="tab" data-tab="ship">Ship Tracker</button>
   <button class="tab" data-tab="characters">Player Sheets</button>
+  <button class="tab" data-tab="npcs" data-gm-only hidden>NPCs</button>
   <button class="tab" data-tab="rolls">Roll Log</button>
   <button class="tab" data-tab="log">Log Book</button>
   <span class="sync-indicator" id="sync-indicator" title="Realtime sync status"><span class="dot"></span><span id="sync-label">offline</span></span>
@@ -422,6 +423,22 @@
     </div>
   </section>
 
+  <!-- NPC QUICK REFERENCE (GM ONLY) -->
+  <section class="panel" id="tab-npcs" data-gm-only hidden>
+    <div class="parchment">
+      <div class="npc-toolbar">
+        <div><h2>NPC Quick Reference</h2><span id="npc-result-count" class="muted"></span></div>
+        <div class="npc-search-tools">
+          <label class="npc-search-label">Search NPCs
+            <input id="npc-search" type="search" placeholder="Name, role, tier, attack, trait…" autocomplete="off" />
+          </label>
+          <button type="button" id="npc-random">Random NPC</button>
+        </div>
+      </div>
+      <div id="npc-card-list" class="npc-card-list"></div>
+    </div>
+  </section>
+
   <!-- ROLL LOG -->
   <section class="panel" id="tab-rolls">
     <div class="parchment">
@@ -456,8 +473,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="firebase-config.js"></script>
-<script src="pdf-sheet.js?v=9"></script>
-<script src="app.js?v=36"></script>
+<script src="pdf-sheet.js?v=10"></script>
+<script src="app.js?v=38"></script>
 <script src="map.js"></script>
 <script src="sync.js?v=2"></script>
 </body>

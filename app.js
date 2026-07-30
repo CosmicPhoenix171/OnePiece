@@ -149,11 +149,19 @@ function setUsername(name) {
   if (currentUsername) localStorage.setItem(USERNAME_KEY, currentUsername);
   else localStorage.removeItem(USERNAME_KEY);
   updateLoginUI();
+  updateGmOnlyUI();
   // After login, make sure non-GM users have their own sheet and re-render it.
   try { ensureOwnSheet(); } catch (e) { console.error(e); }
   try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
   try { if (typeof renderRollLog === 'function') renderRollLog(); } catch (e) { console.error(e); }
   try { if (typeof renderLog === 'function') renderLog(); } catch (e) { console.error(e); }
+}
+
+function updateGmOnlyUI() {
+  const gm = isGmUser();
+  $$('[data-gm-only]').forEach((element) => { element.hidden = !gm; });
+  if (!gm && $('#tab-npcs')?.classList.contains('active')) showTab('map');
+  if (gm) renderNpcCards();
 }
 
 function updateLoginUI() {
@@ -356,6 +364,7 @@ function flashTab(name) {
 }
 
 function showTab(name) {
+  if (name === 'npcs' && !isGmUser()) return;
   const tab = $(`#tabs .tab[data-tab="${name}"]`);
   const panel = $(`#tab-${name}`);
   if (!tab || !panel) return;
@@ -366,6 +375,61 @@ function showTab(name) {
   if (name === 'characters') {
     requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
   }
+}
+
+/* ===========================================================
+   GM NPC quick reference
+   =========================================================== */
+const NPC_STAT_BLOCKS = [
+  { name: 'Dockside Thug', role: 'Street muscle', tier: 'Minion', ac: 11, hp: 35, speed: 30, stats: [14, 10, 12, 8, 9, 9], attacks: ['Club +3 · 1d6+2 bludgeoning', 'Dirty Trick · DC 11 DEX or blinded until next turn'], traits: ['Pack Tactics: +2 to attacks when an ally is adjacent.'] },
+  { name: 'Pirate Deckhand', role: 'Boarding crew', tier: 'Minion', ac: 12, hp: 45, speed: 30, stats: [13, 13, 12, 9, 10, 10], attacks: ['Cutlass +3 · 1d8+1 slashing', 'Flintlock +3 · 1d10 piercing, range 40 ft.'], traits: ['Sea Legs: Advantage against being shoved or knocked prone aboard ship.'] },
+  { name: 'Marine Rifleman', role: 'Ranged soldier', tier: 'Minion', ac: 13, hp: 50, speed: 30, stats: [11, 15, 12, 10, 12, 10], attacks: ['Rifle +4 · 1d12+2 piercing, range 100 ft.', 'Bayonet +2 · 1d6 piercing'], traits: ['Take Aim: If stationary this turn, next rifle attack gains advantage.'] },
+  { name: 'Marine Sergeant', role: 'Squad leader', tier: 'Standard', ac: 15, hp: 120, speed: 30, stats: [16, 12, 15, 11, 14, 14], attacks: ['Saber +5 · 2d8+3 slashing', 'Commanding Shot +3 · 1d10+1 and ally moves 10 ft.'], traits: ['Hold the Line: Nearby Marine allies gain +1 AC.'] },
+  { name: 'Bounty Hunter', role: 'Mobile controller', tier: 'Standard', ac: 14, hp: 150, speed: 35, stats: [14, 16, 14, 13, 15, 12], attacks: ['Chain Blade +5 · 2d6+3 slashing', 'Snare · DC 14 DEX or restrained'], traits: ['Marked Quarry: Deals +1d6 damage to one named target.'] },
+  { name: 'Pirate Captain', role: 'Crew commander', tier: 'Elite', ac: 16, hp: 260, speed: 30, stats: [18, 16, 17, 13, 15, 18], attacks: ['Named Cutlass +7 · 3d8+4 slashing', 'Broadside Order · One ally immediately attacks'], traits: ['Fearsome Reputation: First enemy to engage makes DC 15 WIS save or frightened.', 'Second Wind: Recover 40 HP once.'] },
+  { name: 'Marine Lieutenant', role: 'Tactical duelist', tier: 'Elite', ac: 17, hp: 280, speed: 35, stats: [17, 18, 17, 15, 16, 15], attacks: ['Justice Saber +7 · 3d10+4 slashing', 'Shave Step · Move 20 ft. without reactions'], traits: ['Parry: Reduce one melee hit by 1d10+4.', 'Tactical Orders: One Marine gains advantage each round.'] },
+  { name: 'Fish-Man Bruiser', role: 'Heavy striker', tier: 'Elite', ac: 15, hp: 340, speed: 30, stats: [21, 12, 20, 10, 13, 11], attacks: ['Tidal Fist +8 · 4d8+5 bludgeoning', 'Hurl +8 · Target moves 20 ft. and falls prone'], traits: ['Amphibious.', 'Water Empowered: +2 damage dice while soaked or submerged.'] },
+  { name: 'Devil Fruit Adept', role: 'Unpredictable specialist', tier: 'Elite', ac: 15, hp: 300, speed: 30, stats: [12, 17, 16, 16, 14, 17], attacks: ['Fruit Technique +7 · 4d10 thematic damage', 'Environmental Shift · DC 15 save or controlled'], traits: ['Strange Body: Resistance to one physical damage type.', 'Sea Weakness: Incapacitated while substantially submerged.'] },
+  { name: 'Sea King Juvenile', role: 'Aquatic monster', tier: 'Boss', ac: 16, hp: 480, speed: 10, stats: [23, 12, 21, 5, 14, 8], attacks: ['Bite +9 · 5d10+6 piercing', 'Tail Sweep · 4d8+6, DC 16 STR or prone'], traits: ['Siege Monster: Double damage to ships and structures.', 'Submerge: Cannot be targeted from deck until it surfaces.'] },
+  { name: 'Cipher Agent', role: 'Assassin', tier: 'Boss', ac: 19, hp: 420, speed: 45, stats: [18, 22, 18, 17, 18, 16], attacks: ['Finger Pistol +10 · 4d10+6 piercing', 'Tempest Kick · 4d8 slashing in a 30-ft. line'], traits: ['Six Powers: Dash, disengage, or parry as a bonus action.', 'Evasion: No damage on successful DEX saves.'] },
+  { name: 'Vice Admiral', role: 'Campaign threat', tier: 'Legendary', ac: 21, hp: 650, speed: 40, stats: [24, 20, 23, 18, 21, 20], attacks: ['Haki Strike +12 · 6d10+7 force', 'Conqueror\'s Presence · DC 19 WIS or stunned'], traits: ['Armament Haki: Attacks ignore physical resistance.', 'Legendary Resolve: Succeed on three failed saves.'] }
+];
+
+function npcModifier(score) {
+  const modifier = statMod(score);
+  return modifier >= 0 ? `+${modifier}` : String(modifier);
+}
+
+function npcCardHtml(npc) {
+  const abilities = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+  return `<article class="npc-stat-card" data-npc-search="${esc(JSON.stringify(npc).toLowerCase())}">
+    <header><div><h3>${esc(npc.name)}</h3><p>${esc(npc.role)}</p></div><span>${esc(npc.tier)}</span></header>
+    <div class="npc-vitals"><b>AC ${npc.ac}</b><b>HP ${npc.hp}</b><b>Speed ${npc.speed} ft.</b></div>
+    <div class="npc-abilities">${abilities.map((ability, index) => `<div><b>${ability}</b><span>${npc.stats[index]} (${npcModifier(npc.stats[index])})</span></div>`).join('')}</div>
+    <section><h4>Actions</h4>${npc.attacks.map((attack) => `<p>${esc(attack)}</p>`).join('')}</section>
+    <section><h4>Traits</h4>${npc.traits.map((trait) => `<p>${esc(trait)}</p>`).join('')}</section>
+  </article>`;
+}
+
+function renderNpcCards() {
+  const root = $('#npc-card-list');
+  if (!root || !isGmUser()) return;
+  const query = ($('#npc-search')?.value || '').trim().toLowerCase();
+  const matches = NPC_STAT_BLOCKS.filter((npc) => JSON.stringify(npc).toLowerCase().includes(query));
+  root.innerHTML = matches.map(npcCardHtml).join('') || '<p class="muted npc-empty">No NPC stat blocks match that search.</p>';
+  const count = $('#npc-result-count');
+  if (count) count.textContent = `${matches.length} stat block${matches.length === 1 ? '' : 's'}`;
+}
+
+function initNpcTab() {
+  $('#npc-search')?.addEventListener('input', renderNpcCards);
+  $('#npc-random')?.addEventListener('click', () => {
+    const npc = pick(NPC_STAT_BLOCKS);
+    const search = $('#npc-search');
+    if (search) search.value = npc.name;
+    renderNpcCards();
+  });
+  renderNpcCards();
 }
 
 let diceFaceTimer = null;
@@ -1495,6 +1559,10 @@ function statMod(score) {
   return Math.floor((n - 10) / 2);
 }
 function fmtMod(m) { return (m >= 0 ? `+${m}` : `${m}`); }
+function maximumHpFromConstitution(score) {
+  const modifier = statMod(score);
+  return modifier > 0 ? 100 + (modifier * 100) : 100 + (modifier * 10);
+}
 function updatePdfAbilityModifier(fields, scoreField) {
   const modifierField = PDF_ABILITY_MOD_FIELDS[scoreField];
   if (!modifierField) return false;
@@ -1503,8 +1571,11 @@ function updatePdfAbilityModifier(fields, scoreField) {
   if (rawScore === '' || !Number.isInteger(score) || score < 1 || score > 30) {
     delete fields[modifierField];
   } else {
-    fields[modifierField] = fmtMod(statMod(score));
+    const modifier = statMod(score);
+    fields[modifierField] = fmtMod(modifier);
+    if (scoreField === 'constitution_score') fields.max_hp = String(maximumHpFromConstitution(score));
   }
+  if (scoreField === 'constitution_score' && !fields[modifierField]) delete fields.max_hp;
   return true;
 }
 function updatePdfSkillModifiers(fields, changedField) {
@@ -1571,8 +1642,8 @@ function makeEmptySheet() {
     // Flashback Power-Up (3 charges)
     flashback: 0,
     // Health
-    maxHp: 20,
-    hp: 20,
+    maxHp: 100,
+    hp: 100,
     tempHp: 0,
     // Scars
     scars: { physical: '', emotional: '', reputation: '' },
@@ -1645,6 +1716,7 @@ function normalizeSheet(pc) {
   Object.keys(PDF_ABILITY_MOD_FIELDS).forEach((scoreField) => {
     updatePdfAbilityModifier(merged.pdfFields, scoreField);
   });
+  if (merged.pdfFields.max_hp !== undefined) merged.maxHp = Number(merged.pdfFields.max_hp) || 100;
   updatePdfSkillModifiers(merged.pdfFields);
   return merged;
 }
@@ -2213,6 +2285,7 @@ function attachSheetHandlers(card, sheet, idx) {
         }
         const updatedModifier = updatePdfAbilityModifier(s.pdfFields, fieldName);
         const updatedSkills = updatePdfSkillModifiers(s.pdfFields, fieldName);
+        if (fieldName === 'constitution_score') s.maxHp = Number(s.pdfFields.max_hp) || 100;
         // Keep a few mirrored convenience fields in sync so display names update.
         if (fieldName === 'character_name') s.name = String(value || '');
         if (fieldName === 'bounty')         s.bounty = Number(value) || 0;
@@ -2749,6 +2822,8 @@ refreshStats();
 renderLog();
 renderRollLog();
 renderPlayerSheets();
+initNpcTab();
+updateGmOnlyUI();
 renderTravel();
 renderShip();
 

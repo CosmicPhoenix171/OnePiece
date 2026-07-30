@@ -20,6 +20,7 @@
     'strength_mod',
     'dexterity_mod',
     'constitution_mod',
+    'max_hp',
     'intelligence_mod',
     'wisdom_mod',
     'charisma_mod',
@@ -258,7 +259,7 @@
       const el = buildWidget(a, viewport, stored, canEdit);
       layer.appendChild(el);
       fitFieldText(el);
-      if (isCalculatedField(a.fieldName) && a.fieldName !== 'passive_perception') makeRollable(card, sheet, el);
+      if (isCalculatedField(a.fieldName) && !['passive_perception', 'max_hp'].includes(a.fieldName)) makeRollable(card, sheet, el);
       fieldEls.set(a.fieldName, el);
 
       if (canEdit) {

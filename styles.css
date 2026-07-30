@@ -687,6 +687,58 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 .roll-log-copy small, .roll-log-meta time { color: #6a5230; }
 .roll-log-meta { text-align: right; }
 
+.npc-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--gold-dark);
+  padding-bottom: 12px;
+}
+.npc-toolbar h2 { margin: 0; }
+.npc-search-tools { display: flex; align-items: end; gap: 8px; }
+.npc-search-label { display: grid; gap: 3px; font-size: 0.78rem; font-weight: bold; }
+.npc-search-label input { width: min(340px, 55vw); }
+.npc-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.npc-stat-card {
+  border: 1px solid var(--gold-dark);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.42);
+  color: var(--ink);
+}
+.npc-stat-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #7a1f1f;
+  color: #fff4cf;
+}
+.npc-stat-card header h3 { margin: 0; color: #fff4cf; font-size: 1.05rem; }
+.npc-stat-card header p { margin: 1px 0 0; font-size: 0.78rem; opacity: 0.86; }
+.npc-stat-card header > span { align-self: start; font-size: 0.72rem; font-weight: bold; }
+.npc-vitals { display: flex; gap: 14px; padding: 8px 12px; border-bottom: 1px solid rgba(138,106,31,0.35); }
+.npc-abilities { display: grid; grid-template-columns: repeat(6, 1fr); border-bottom: 1px solid rgba(138,106,31,0.35); }
+.npc-abilities div { display: grid; padding: 7px 2px; text-align: center; font-size: 0.7rem; }
+.npc-abilities span { white-space: nowrap; }
+.npc-stat-card section { padding: 8px 12px; }
+.npc-stat-card section + section { padding-top: 0; }
+.npc-stat-card h4 { margin: 0 0 3px; color: #7a1f1f; font-size: 0.78rem; text-transform: uppercase; }
+.npc-stat-card section p { margin: 2px 0; font-size: 0.82rem; }
+.npc-empty { grid-column: 1 / -1; padding: 30px; text-align: center; }
+
+@media (max-width: 640px) {
+  .npc-toolbar, .npc-search-tools { align-items: stretch; flex-direction: column; }
+  .npc-search-label input { width: 100%; }
+  .npc-card-list { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 640px) {
   .roll-log-entry { grid-template-columns: 48px minmax(0, 1fr); }
   .roll-log-result { width: 42px; height: 42px; }
