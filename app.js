@@ -1402,6 +1402,31 @@ function selectPlayerSheetTab(root, sheetId) {
   }
 }
 
+function reorderPlayerSheetTabs(root, draggedId, targetId, placeAfter) {
+  const visible = visibleSheetsForCurrentUser();
+  if (draggedId === targetId || !visible.some(({ s }) => s.id === draggedId)) return;
+
+  const ordered = visible.map(({ s }) => s);
+  const draggedIndex = ordered.findIndex((sheet) => sheet.id === draggedId);
+  const [dragged] = ordered.splice(draggedIndex, 1);
+  const targetIndex = ordered.findIndex((sheet) => sheet.id === targetId);
+  if (targetIndex < 0) return;
+  ordered.splice(targetIndex + (placeAfter ? 1 : 0), 0, dragged);
+
+  visible.forEach(({ i }, index) => {
+    state.playerSheets[i] = ordered[index];
+  });
+  root.dataset.activeSheetId = draggedId;
+  root.dataset.sheetSig = '';
+  save();
+  renderPlayerSheets();
+}
+
+function tabDropGoesAfter(root, draggedId, targetId) {
+  const ids = $$('[data-sheet-tab]', root).map((tab) => tab.dataset.sheetTab);
+  return ids.indexOf(draggedId) < ids.indexOf(targetId);
+}
+
 function renderPlayerSheets() {
   const root = $('#player-sheet-list');
   if (!root) return;
@@ -1458,7 +1483,7 @@ function renderPlayerSheets() {
   root.dataset.sheetSig = signature;
   root.innerHTML = `
     ${visible.length > 1 ? `<div class="character-sheet-tabs" role="tablist" aria-label="Character sheets">
-      ${visible.map(({ s }) => `<button type="button" role="tab" data-sheet-tab="${esc(s.id)}">${esc(s.name || s.player || 'Character')}</button>`).join('')}
+      ${visible.map(({ s }) => `<button type="button" role="tab" title="Drag to reorder" data-sheet-tab="${esc(s.id)}">${esc(s.name || s.player || 'Character')}</button>`).join('')}
     </div>` : ''}
     <div class="character-sheet-panels">
       ${visible.map(({ s, i }) => renderSheetHtml(s, i)).join('')}
@@ -1489,8 +1514,60 @@ function renderPlayerSheets() {
     attachSheetHandlers(card, sheet, idx);
   });
 
+  let pointerDrag = null;
+  const clearTabDragClasses = () => {
+    $$('[data-sheet-tab]', root).forEach((item) => item.classList.remove('dragging', 'drop-before', 'drop-after'));
+  };
   $$('[data-sheet-tab]', root).forEach((tab) => {
-    tab.addEventListener('click', () => selectPlayerSheetTab(root, tab.dataset.sheetTab));
+    tab.addEventListener('click', (event) => {
+      if (pointerDrag?.moved) {
+        event.preventDefault();
+        pointerDrag = null;
+        return;
+      }
+      selectPlayerSheetTab(root, tab.dataset.sheetTab);
+    });
+    tab.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      pointerDrag = {
+        pointerId: event.pointerId,
+        draggedId: tab.dataset.sheetTab,
+        targetId: tab.dataset.sheetTab,
+        startX: event.clientX,
+        startY: event.clientY,
+        moved: false
+      };
+      tab.setPointerCapture(event.pointerId);
+    });
+    tab.addEventListener('pointermove', (event) => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+      if (!pointerDrag.moved && Math.hypot(event.clientX - pointerDrag.startX, event.clientY - pointerDrag.startY) < 6) return;
+      pointerDrag.moved = true;
+      event.preventDefault();
+      clearTabDragClasses();
+      tab.classList.add('dragging');
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-sheet-tab]');
+      if (!target || !root.contains(target)) return;
+      pointerDrag.targetId = target.dataset.sheetTab;
+      const placeAfter = tabDropGoesAfter(root, pointerDrag.draggedId, pointerDrag.targetId);
+      target.classList.add(placeAfter ? 'drop-after' : 'drop-before');
+    });
+    const finishPointerDrag = (event) => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+      const completedDrag = pointerDrag;
+      clearTabDragClasses();
+      if (completedDrag.moved && completedDrag.targetId !== completedDrag.draggedId) {
+        reorderPlayerSheetTabs(root, completedDrag.draggedId, completedDrag.targetId,
+          tabDropGoesAfter(root, completedDrag.draggedId, completedDrag.targetId));
+      } else if (!completedDrag.moved) {
+        pointerDrag = null;
+      }
+    };
+    tab.addEventListener('pointerup', finishPointerDrag);
+    tab.addEventListener('pointercancel', () => {
+      clearTabDragClasses();
+      pointerDrag = null;
+    });
     tab.addEventListener('keydown', (event) => {
       const tabs = $$('[data-sheet-tab]', root);
       const current = tabs.indexOf(tab);

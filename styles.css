@@ -545,6 +545,21 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   border-bottom-color: var(--gold-dark);
   background: rgba(255,255,255,0.35);
   color: #4a2a0a;
+  cursor: grab;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: opacity 120ms ease, box-shadow 120ms ease;
+}
+.character-sheet-tabs button.dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+.character-sheet-tabs button.drop-before {
+  box-shadow: -4px 0 0 #8a2f1b;
+}
+.character-sheet-tabs button.drop-after {
+  box-shadow: 4px 0 0 #8a2f1b;
 }
 .character-sheet-tabs button.active {
   background: #ead08a;
