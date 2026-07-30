@@ -60,6 +60,7 @@ const DEFAULT_STATE = {
   playerNoteDates: {},
   rollLog: [],
   dicePreferences: {},
+  npcEncounter: [],
   mapMarkers: [],
   mapImageData: '',
   mapImageName: '',
@@ -106,6 +107,8 @@ function applyRemoteState(remote) {
 }
 function rerenderAll() {
   try { if (typeof refreshStats === 'function') refreshStats(); } catch (e) { console.error(e); }
+  try { if (typeof renderNpcEncounter === 'function') renderNpcEncounter(); } catch (e) { console.error(e); }
+  try { if (typeof renderNpcCards === 'function') renderNpcCards(); } catch (e) { console.error(e); }
   try { if (typeof renderRollLog === 'function') renderRollLog(); } catch (e) { console.error(e); }
   try { if (typeof renderLog === 'function') renderLog(); } catch (e) { console.error(e); }
   try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
@@ -161,7 +164,10 @@ function updateGmOnlyUI() {
   const gm = isGmUser();
   $$('[data-gm-only]').forEach((element) => { element.hidden = !gm; });
   if (!gm && $('#tab-npcs')?.classList.contains('active')) showTab('map');
-  if (gm) renderNpcCards();
+  if (gm) {
+    renderNpcEncounter();
+    renderNpcCards();
+  }
 }
 
 function updateLoginUI() {
@@ -408,7 +414,64 @@ function npcCardHtml(npc) {
     <div class="npc-abilities">${abilities.map((ability, index) => `<div><b>${ability}</b><span>${npc.stats[index]} (${npcModifier(npc.stats[index])})</span></div>`).join('')}</div>
     <section><h4>Actions</h4>${npc.attacks.map((attack) => `<p>${esc(attack)}</p>`).join('')}</section>
     <section><h4>Traits</h4>${npc.traits.map((trait) => `<p>${esc(trait)}</p>`).join('')}</section>
+    <footer><button type="button" data-add-npc="${esc(npc.name)}">Add to Encounter</button></footer>
   </article>`;
+}
+
+function addNpcToEncounter(templateName) {
+  if (!isGmUser()) return;
+  const npc = NPC_STAT_BLOCKS.find((entry) => entry.name === templateName);
+  if (!npc) return;
+  if (!Array.isArray(state.npcEncounter)) state.npcEncounter = [];
+  const matching = state.npcEncounter.filter((entry) => entry.templateName === npc.name).length;
+  state.npcEncounter.push({
+    id: uid(),
+    templateName: npc.name,
+    name: matching ? `${npc.name} ${matching + 1}` : npc.name,
+    tier: npc.tier,
+    ac: npc.ac,
+    maxHp: npc.hp,
+    hp: npc.hp
+  });
+  save();
+  renderNpcEncounter();
+}
+
+function npcEncounterCardHtml(combatant) {
+  const maxHp = Math.max(1, Number(combatant.maxHp) || 1);
+  const hp = clamp(Number(combatant.hp) || 0, 0, maxHp);
+  const percent = clamp((hp / maxHp) * 100, 0, 100);
+  return `<article class="npc-combatant${hp === 0 ? ' defeated' : ''}" data-combatant-id="${esc(combatant.id)}">
+    <div class="npc-combatant-head">
+      <input type="text" data-combatant-name value="${esc(combatant.name)}" aria-label="Combatant name" maxlength="50" />
+      <span>${esc(combatant.tier)} · AC ${Number(combatant.ac) || 0}</span>
+      <button type="button" class="danger" data-remove-combatant title="Remove from encounter" aria-label="Remove ${esc(combatant.name)}">×</button>
+    </div>
+    <div class="npc-hp-summary"><strong>${hp} / ${maxHp} HP</strong><span>${hp === 0 ? 'Defeated' : `${Math.round(percent)}%`}</span></div>
+    <div class="npc-hp-bar"><div style="width:${percent}%"></div></div>
+    <div class="npc-hp-controls">
+      <button type="button" data-hp-delta="-10">−10</button>
+      <button type="button" data-hp-delta="-5">−5</button>
+      <button type="button" data-hp-delta="-1">−1</button>
+      <input type="number" min="0" max="${maxHp}" value="${hp}" data-combatant-hp aria-label="Current HP for ${esc(combatant.name)}" />
+      <button type="button" data-hp-delta="1">+1</button>
+      <button type="button" data-hp-delta="5">+5</button>
+      <button type="button" data-hp-delta="10">+10</button>
+    </div>
+  </article>`;
+}
+
+function renderNpcEncounter() {
+  const root = $('#npc-encounter-list');
+  if (!root || !isGmUser()) return;
+  if (!Array.isArray(state.npcEncounter)) state.npcEncounter = [];
+  root.innerHTML = state.npcEncounter.length
+    ? state.npcEncounter.map(npcEncounterCardHtml).join('')
+    : '<p class="muted npc-encounter-empty">No NPCs in the encounter. Add one from a stat block below.</p>';
+  const count = $('#npc-encounter-count');
+  if (count) count.textContent = `${state.npcEncounter.length} combatant${state.npcEncounter.length === 1 ? '' : 's'}`;
+  const clear = $('#npc-clear-encounter');
+  if (clear) clear.hidden = !state.npcEncounter.length;
 }
 
 function renderNpcCards() {
@@ -429,6 +492,46 @@ function initNpcTab() {
     if (search) search.value = npc.name;
     renderNpcCards();
   });
+  $('#npc-card-list')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-add-npc]');
+    if (button) addNpcToEncounter(button.dataset.addNpc);
+  });
+  $('#npc-encounter-list')?.addEventListener('click', (event) => {
+    const card = event.target.closest('[data-combatant-id]');
+    if (!card) return;
+    const index = state.npcEncounter.findIndex((entry) => entry.id === card.dataset.combatantId);
+    if (index < 0) return;
+    if (event.target.closest('[data-remove-combatant]')) {
+      state.npcEncounter.splice(index, 1);
+    } else {
+      const deltaButton = event.target.closest('[data-hp-delta]');
+      if (!deltaButton) return;
+      const combatant = state.npcEncounter[index];
+      combatant.hp = clamp((Number(combatant.hp) || 0) + Number(deltaButton.dataset.hpDelta), 0, Number(combatant.maxHp) || 1);
+    }
+    save();
+    renderNpcEncounter();
+  });
+  $('#npc-encounter-list')?.addEventListener('change', (event) => {
+    const card = event.target.closest('[data-combatant-id]');
+    const combatant = state.npcEncounter.find((entry) => entry.id === card?.dataset.combatantId);
+    if (!combatant) return;
+    if (event.target.matches('[data-combatant-hp]')) {
+      combatant.hp = clamp(Number(event.target.value) || 0, 0, Number(combatant.maxHp) || 1);
+    }
+    if (event.target.matches('[data-combatant-name]')) {
+      combatant.name = String(event.target.value || combatant.templateName).trim().slice(0, 50) || combatant.templateName;
+    }
+    save();
+    renderNpcEncounter();
+  });
+  $('#npc-clear-encounter')?.addEventListener('click', () => {
+    if (!state.npcEncounter?.length || !confirm('Clear every NPC from the encounter?')) return;
+    state.npcEncounter = [];
+    save();
+    renderNpcEncounter();
+  });
+  renderNpcEncounter();
   renderNpcCards();
 }
 

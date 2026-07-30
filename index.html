@@ -426,6 +426,13 @@
   <!-- NPC QUICK REFERENCE (GM ONLY) -->
   <section class="panel" id="tab-npcs" data-gm-only hidden>
     <div class="parchment">
+      <section class="npc-encounter-board" aria-labelledby="npc-encounter-heading">
+        <div class="npc-encounter-header">
+          <div><h2 id="npc-encounter-heading">Active Encounter</h2><span id="npc-encounter-count" class="muted"></span></div>
+          <button type="button" id="npc-clear-encounter" class="danger" hidden>Clear Encounter</button>
+        </div>
+        <div id="npc-encounter-list" class="npc-encounter-list" aria-live="polite"></div>
+      </section>
       <div class="npc-toolbar">
         <div><h2>NPC Quick Reference</h2><span id="npc-result-count" class="muted"></span></div>
         <div class="npc-search-tools">
@@ -474,7 +481,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="pdf-sheet.js?v=10"></script>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=39"></script>
 <script src="map.js"></script>
 <script src="sync.js?v=2"></script>
 </body>
