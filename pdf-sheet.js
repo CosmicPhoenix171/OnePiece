@@ -75,7 +75,7 @@
       .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
-  function rollModifier(card, el) {
+  function rollModifier(card, sheet, el) {
     const modifier = Number(el.value);
     if (el.value.trim() === '' || !Number.isFinite(modifier)) {
       setStatus(card, `Enter an ability score before rolling ${rollLabel(el.dataset.field)}.`);
@@ -90,20 +90,33 @@
       status.style.top = `${Math.max(8, el.offsetTop - 42)}px`;
     }
     setStatus(card, `${rollLabel(el.dataset.field)}: d20 ${die} ${signedModifier} = ${total}`);
+    if (typeof window.showDiceRoll === 'function') {
+      window.showDiceRoll({ sides: 20, die, modifier, total, label: rollLabel(el.dataset.field) });
+    }
+    if (typeof window.recordRoll === 'function') {
+      window.recordRoll({
+        label: rollLabel(el.dataset.field),
+        character: sheet.name || sheet.player || '',
+        sides: 20,
+        die,
+        modifier,
+        total
+      });
+    }
     clearTimeout(_rollResultTimer);
     _rollResultTimer = setTimeout(() => setStatus(card, ''), 8000);
   }
 
-  function makeRollable(card, el) {
+  function makeRollable(card, sheet, el) {
     el.classList.add('pdf-roll-field');
     const label = rollLabel(el.dataset.field);
     el.title = `Roll ${label} (d20 + modifier)`;
     el.setAttribute('aria-label', `Roll ${label}`);
-    el.addEventListener('click', () => rollModifier(card, el));
+    el.addEventListener('click', () => rollModifier(card, sheet, el));
     el.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
-      rollModifier(card, el);
+      rollModifier(card, sheet, el);
     });
   }
 
@@ -226,7 +239,7 @@
       const el = buildWidget(a, viewport, stored, canEdit);
       layer.appendChild(el);
       fitFieldText(el);
-      if (isCalculatedField(a.fieldName) && a.fieldName !== 'passive_perception') makeRollable(card, el);
+      if (isCalculatedField(a.fieldName) && a.fieldName !== 'passive_perception') makeRollable(card, sheet, el);
       fieldEls.set(a.fieldName, el);
 
       if (canEdit) {

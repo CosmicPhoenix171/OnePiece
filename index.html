@@ -4,10 +4,21 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>The Devil's Ransom</title>
-<link rel="stylesheet" href="styles.css?v=13" />
+<link rel="stylesheet" href="styles.css?v=15" />
 </head>
 <body>
 <div id="water-damage-overlay" class="water-damage-overlay" aria-hidden="true"></div>
+<div id="dice-roll-overlay" class="dice-roll-overlay" aria-hidden="true">
+  <div class="dice-roll-stage" role="status" aria-live="assertive">
+    <div id="dice-roll-kind" class="dice-roll-kind">Roll</div>
+    <div id="dice-three-wrap" class="dice-three-wrap">
+      <canvas id="dice-three-canvas" class="dice-three-canvas" width="180" height="180" aria-hidden="true"></canvas>
+      <div class="dice-fallback" aria-hidden="true"></div>
+      <span id="dice-roll-face" class="dice-roll-face">20</span>
+    </div>
+    <div id="dice-roll-result" class="dice-roll-result">Rolling…</div>
+  </div>
+</div>
 <header class="topbar">
   <h1>🏴‍☠️ The Devil's Ransom</h1>
   <div class="userbar">
@@ -21,6 +32,7 @@
   <button class="tab active" data-tab="map">Map</button>
   <button class="tab" data-tab="ship">Ship Tracker</button>
   <button class="tab" data-tab="characters">Player Sheets</button>
+  <button class="tab" data-tab="rolls">Roll Log</button>
   <button class="tab" data-tab="log">Log Book</button>
   <span class="sync-indicator" id="sync-indicator" title="Realtime sync status"><span class="dot"></span><span id="sync-label">offline</span></span>
 </nav>
@@ -410,6 +422,17 @@
     </div>
   </section>
 
+  <!-- ROLL LOG -->
+  <section class="panel" id="tab-rolls">
+    <div class="parchment">
+      <div class="roll-log-header">
+        <h2>Roll Log</h2>
+        <button type="button" class="danger" data-action="clearRollLog" hidden>Clear Log</button>
+      </div>
+      <div id="roll-log-list" class="roll-log-list" aria-live="polite"></div>
+    </div>
+  </section>
+
   <!-- LOG -->
   <section class="panel" id="tab-log">
     <div class="parchment">
@@ -431,9 +454,10 @@
 <!-- PDF.js reads sheet fields; pdf-lib writes filled copies for download. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="firebase-config.js"></script>
-<script src="pdf-sheet.js?v=6"></script>
-<script src="app.js?v=25"></script>
+<script src="pdf-sheet.js?v=8"></script>
+<script src="app.js?v=33"></script>
 <script src="map.js"></script>
 <script src="sync.js?v=2"></script>
 </body>

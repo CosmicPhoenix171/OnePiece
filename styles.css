@@ -78,6 +78,88 @@ body {
   .water-damage-overlay::before { animation: none; }
 }
 
+.dice-roll-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  background: rgba(3, 12, 18, 0.2);
+  transition: opacity 140ms ease, visibility 140ms ease;
+}
+.dice-roll-overlay.active { visibility: visible; opacity: 1; }
+.dice-roll-stage {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 190px;
+  padding: 16px 24px;
+  color: #fff5d8;
+  text-align: center;
+  text-shadow: 1px 2px 2px #000;
+}
+.dice-roll-kind { font-weight: bold; }
+.dice-three-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 180px;
+  height: 180px;
+  filter: drop-shadow(0 14px 9px rgba(0,0,0,0.58));
+}
+.dice-three-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 180px;
+  height: 180px;
+}
+.dice-fallback {
+  display: none;
+  width: 112px;
+  height: 112px;
+  -webkit-clip-path: polygon(50% 0, 94% 25%, 94% 75%, 50% 100%, 6% 75%, 6% 25%);
+  clip-path: polygon(50% 0, 94% 25%, 94% 75%, 50% 100%, 6% 75%, 6% 25%);
+  background:
+    linear-gradient(30deg, transparent 48%, rgba(255,255,255,0.35) 49% 51%, transparent 52%),
+    linear-gradient(-30deg, transparent 48%, rgba(70,28,13,0.34) 49% 51%, transparent 52%),
+    linear-gradient(145deg, var(--dice-color, var(--gold-bright)), var(--rust));
+}
+.dice-three-wrap.webgl-unavailable .dice-three-canvas { display: none; }
+.dice-three-wrap.webgl-unavailable .dice-fallback { display: block; }
+.dice-roll-face {
+  display: none;
+  position: relative;
+  z-index: 1;
+  color: #201006;
+  font-size: 2.3rem;
+  font-weight: bold;
+  text-shadow: 0 1px rgba(255,255,255,0.5);
+}
+.dice-three-wrap.webgl-unavailable .dice-roll-face { display: block; }
+.dice-roll-overlay.rolling .dice-three-wrap { animation: dice-tumble 720ms cubic-bezier(.3,.7,.2,1); }
+.dice-roll-overlay.settled .dice-three-wrap { animation: dice-land 300ms ease-out; }
+.dice-roll-result { min-height: 1.5em; font-size: 1.1rem; font-weight: bold; }
+@keyframes dice-tumble {
+  0% { transform: translate3d(-80px, -100px, 0) rotate(-160deg) scale(0.55); }
+  35% { transform: translate3d(48px, 12px, 0) rotate(210deg) scale(1.05); }
+  68% { transform: translate3d(-24px, -22px, 0) rotate(430deg) scale(0.9); }
+  100% { transform: translate3d(0, 0, 0) rotate(720deg) scale(1); }
+}
+@keyframes dice-land {
+  0% { transform: scale(1.18); }
+  55% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dice-roll-overlay { transition: none; }
+  .dice-roll-overlay.rolling .dice-three-wrap,
+  .dice-roll-overlay.settled .dice-three-wrap { animation: none; }
+}
+
 .topbar {
   padding: 18px 24px 8px;
   text-align: center;
@@ -570,6 +652,47 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   margin-top: 0;
 }
 
+.roll-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--gold-dark);
+}
+.roll-log-header h2 { margin: 0 0 8px; }
+.roll-log-list { display: grid; }
+.roll-log-empty { padding: 24px 0; text-align: center; }
+.roll-log-entry {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) minmax(150px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid rgba(138,106,31,0.35);
+}
+.roll-log-result {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--gold-dark);
+  border-radius: 4px;
+  background: #ead08a;
+  color: #4a2a0a;
+  font-size: 1.3rem;
+  font-weight: bold;
+}
+.roll-log-copy, .roll-log-meta { display: grid; gap: 2px; }
+.roll-log-copy span { color: #4a2a0a; }
+.roll-log-copy small, .roll-log-meta time { color: #6a5230; }
+.roll-log-meta { text-align: right; }
+
+@media (max-width: 640px) {
+  .roll-log-entry { grid-template-columns: 48px minmax(0, 1fr); }
+  .roll-log-result { width: 42px; height: 42px; }
+  .roll-log-meta { grid-column: 2; text-align: left; }
+}
+
 /* ===========================================================
    Character Sheet — embedded fillable PDF
    =========================================================== */
@@ -668,7 +791,50 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 }
 .sheet-reference tr:last-child td { border-bottom: 0; }
 .sheet-reference tr.critical td { color: #7a1f1f; }
-.sheet-reference-dcs .sheet-reference-panel { left: auto; right: 0; }
+.sheet-reference-dcs .sheet-reference-panel,
+.sheet-reference-dice .sheet-reference-panel { left: auto; right: 0; }
+.dice-options-panel { width: 280px; padding: 10px; }
+.dice-color-controls {
+  display: grid;
+  grid-template-columns: 58px repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.dice-color-controls label {
+  display: grid;
+  gap: 3px;
+  color: #5b2b12;
+  font-size: 0.7rem;
+  font-weight: bold;
+}
+.dice-color-controls input[type="number"] { width: 100%; min-width: 0; padding: 5px 3px; }
+.dice-color-controls input[type="color"] { width: 42px; height: 32px; padding: 2px; }
+.dice-roll-modes {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 10px;
+  color: #4a2a0a;
+  font-size: 0.78rem;
+}
+.dice-roll-modes label { display: inline-flex; align-items: center; gap: 5px; }
+.dice-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.dice-options-grid button {
+  min-height: 42px;
+  padding: 7px;
+  background: #ead08a;
+  color: #4a2a0a;
+  font-weight: bold;
+}
+.dice-options-grid button:hover,
+.dice-options-grid button:focus-visible { background: var(--gold-bright); }
+@media (max-width: 640px) {
+  .sheet-reference-dice .sheet-reference-panel { right: auto; left: 0; }
+}
 .pdf-sheet-wrap {
   position: relative;
   display: block;
