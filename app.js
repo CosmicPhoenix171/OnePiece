@@ -523,7 +523,11 @@ function initDice3d() {
     const rimLight = new THREE.DirectionalLight(0xd04b25, 0.8);
     rimLight.position.set(4, -2, 2);
     scene.add(rimLight);
-    dice3d = { renderer, scene, camera, wrap, group: null, faces: [], sides: null, frame: null };
+    dice3d = {
+      renderer, scene, camera, wrap,
+      group: null, groups: [], faces: [], faceSets: [],
+      sides: null, count: 0, frame: null
+    };
     return dice3d;
   } catch (error) {
     console.warn('[dice] WebGL unavailable; using fallback.', error);
@@ -532,51 +536,68 @@ function initDice3d() {
   }
 }
 
-function startDice3d(sides, reducedMotion) {
+function buildDie3d(sides) {
+  const geometry = diceGeometry(sides);
+  const solid = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+    color: 0xd8a83f,
+    emissive: 0x301204,
+    emissiveIntensity: 0.18,
+    flatShading: true,
+    metalness: 0.28,
+    roughness: 0.38
+  }));
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geometry, 12),
+    new THREE.LineBasicMaterial({ color: 0x4c1e0a, transparent: true, opacity: 0.82 })
+  );
+  const faces = numberedDieFaces(geometry);
+  const group = new THREE.Group();
+  group.add(solid, edges);
+  addDieFaceNumbers(group, faces, sides);
+  return { group, faces };
+}
+
+function startDice3d(sides, reducedMotion, rolls = []) {
   const view = initDice3d();
   if (!view) return;
-  if (view.sides !== sides) {
-    if (view.group) {
-      view.scene.remove(view.group);
-      view.group.traverse((child) => {
+  const count = rolls.length > 1 ? 2 : 1;
+  if (view.sides !== sides || view.count !== count) {
+    view.groups.forEach((group) => {
+      view.scene.remove(group);
+      group.traverse((child) => {
+        child.material?.map?.dispose?.();
         child.geometry?.dispose?.();
         child.material?.dispose?.();
       });
-    }
-    const geometry = diceGeometry(sides);
-    const solid = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-      color: 0xd8a83f,
-      emissive: 0x301204,
-      emissiveIntensity: 0.18,
-      flatShading: true,
-      metalness: 0.28,
-      roughness: 0.38
-    }));
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(geometry, 12),
-      new THREE.LineBasicMaterial({ color: 0x4c1e0a, transparent: true, opacity: 0.82 })
-    );
-    const faces = numberedDieFaces(geometry);
-    view.group = new THREE.Group();
-    view.group.add(solid, edges);
-    addDieFaceNumbers(view.group, faces, sides);
-    view.scene.add(view.group);
-    view.faces = faces;
+    });
+    const dice = Array.from({ length: count }, () => buildDie3d(sides));
+    view.groups = dice.map((item) => item.group);
+    view.faceSets = dice.map((item) => item.faces);
+    view.groups.forEach((group) => view.scene.add(group));
+    view.group = view.groups[0];
+    view.faces = view.faceSets[0];
     view.sides = sides;
+    view.count = count;
   }
   const dieColor = diceColorHex();
-  view.group.children[0].material.color.set(dieColor);
-  view.group.children[0].material.emissive.set(dieColor).multiplyScalar(0.16);
+  view.groups.forEach((group, index) => {
+    group.children[0].material.color.set(dieColor);
+    group.children[0].material.emissive.set(dieColor).multiplyScalar(0.16);
+    group.position.x = count === 2 ? (index === 0 ? -0.82 : 0.82) : 0;
+    group.scale.setScalar(count === 2 ? 0.76 : 1);
+    group.rotation.set(0.25 + index * 0.4, -0.35 - index * 0.3, 0.1 + index * 0.2);
+  });
   view.wrap.style.setProperty('--dice-color', dieColor);
   cancelAnimationFrame(view.frame);
-  view.group.rotation.set(0.25, -0.35, 0.1);
   const animate = () => {
     const overlay = $('#dice-roll-overlay');
     if (!overlay?.classList.contains('active')) return;
     if (overlay.classList.contains('rolling') && !reducedMotion) {
-      view.group.rotation.x += 0.16;
-      view.group.rotation.y += 0.22;
-      view.group.rotation.z += 0.09;
+      view.groups.forEach((group, index) => {
+        group.rotation.x += 0.14 + index * 0.035;
+        group.rotation.y += 0.22 - index * 0.03;
+        group.rotation.z += 0.08 + index * 0.025;
+      });
     }
     view.renderer.render(view.scene, view.camera);
     view.frame = requestAnimationFrame(animate);
@@ -584,21 +605,23 @@ function startDice3d(sides, reducedMotion) {
   animate();
 }
 
-function settleDice3d(value) {
+function settleDice3d(value, dieIndex = 0) {
   const view = dice3d;
-  const face = view?.faces?.[(Number(value) - 1) % view.faces.length];
-  if (!view?.group || !face) return;
+  const group = view?.groups?.[dieIndex];
+  const faces = view?.faceSets?.[dieIndex];
+  const face = faces?.[(Number(value) - 1) % faces.length];
+  if (!group || !face) return;
   const forward = new THREE.Vector3(0, 0, 1);
   const faceForward = new THREE.Quaternion().setFromUnitVectors(face.normal, forward);
   const labelUp = new THREE.Vector3(0, 1, 0)
     .applyQuaternion(face.label.quaternion)
     .applyQuaternion(faceForward);
   const straighten = new THREE.Quaternion().setFromAxisAngle(forward, Math.atan2(labelUp.x, labelUp.y));
-  view.group.quaternion.copy(straighten.multiply(faceForward));
+  group.quaternion.copy(straighten.multiply(faceForward));
   view.renderer.render(view.scene, view.camera);
 }
 
-function showDiceRoll({ sides = 20, die, modifier = 0, total = die, label = 'Roll', rollDetail = '' }) {
+function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, label = 'Roll', rollDetail = '' }) {
   const overlay = $('#dice-roll-overlay');
   const face = $('#dice-roll-face');
   const kind = $('#dice-roll-kind');
@@ -610,6 +633,7 @@ function showDiceRoll({ sides = 20, die, modifier = 0, total = die, label = 'Rol
   clearTimeout(diceHideTimer);
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const finalDie = clamp(Number(die) || 1, 1, sides);
+  const activeRolls = rolls.length > 1 ? rolls.slice(0, 2) : [finalDie];
   const numericModifier = Number(modifier) || 0;
   kind.textContent = `${label} · d${sides}`;
   result.textContent = 'Rolling…';
@@ -617,7 +641,7 @@ function showDiceRoll({ sides = 20, die, modifier = 0, total = die, label = 'Rol
   overlay.classList.remove('settled');
   overlay.classList.add('active', 'rolling');
   overlay.setAttribute('aria-hidden', 'false');
-  startDice3d(sides, reducedMotion);
+  startDice3d(sides, reducedMotion, activeRolls);
 
   const settle = () => {
     clearInterval(diceFaceTimer);
@@ -625,7 +649,7 @@ function showDiceRoll({ sides = 20, die, modifier = 0, total = die, label = 'Rol
     result.textContent = rollDetail || (numericModifier
       ? `${finalDie} ${numericModifier >= 0 ? '+' : '−'} ${Math.abs(numericModifier)} = ${Number(total) || 0}`
       : `${finalDie}`);
-    settleDice3d(finalDie);
+    activeRolls.forEach((value, index) => settleDice3d(value, index));
     overlay.classList.remove('rolling');
     overlay.classList.add('settled');
     diceHideTimer = setTimeout(() => {
@@ -654,6 +678,7 @@ function recordRoll(entry, shouldSave = true) {
     label: String(entry.label || 'Roll').trim(),
     sides: Number(entry.sides) || 20,
     die: Number(entry.die) || 0,
+    rolls: Array.isArray(entry.rolls) ? entry.rolls.slice(0, 2).map(Number) : [],
     modifier: Number(entry.modifier) || 0,
     total: Number(entry.total) || 0,
     detail: String(entry.detail || '').trim(),
@@ -678,7 +703,9 @@ function renderRollLog() {
   root.innerHTML = state.rollLog.map((entry) => {
     const modifier = Number(entry.modifier) || 0;
     const expression = entry.die
-      ? `d${Number(entry.sides) || 20} (${Number(entry.die)})${modifier ? ` ${modifier >= 0 ? '+' : '-'} ${Math.abs(modifier)}` : ''} = ${Number(entry.total) || 0}`
+      ? entry.rolls?.length > 1
+        ? `d${Number(entry.sides) || 20} rolls: ${entry.rolls.map(Number).join(', ')} → kept ${Number(entry.die)}`
+        : `d${Number(entry.sides) || 20} (${Number(entry.die)})${modifier ? ` ${modifier >= 0 ? '+' : '-'} ${Math.abs(modifier)}` : ''} = ${Number(entry.total) || 0}`
       : entry.detail;
     const identity = entry.character && entry.character !== entry.roller
       ? `${entry.roller} · ${entry.character}`
@@ -691,7 +718,7 @@ function renderRollLog() {
       <div class="roll-log-copy">
         <strong>${esc(entry.label)}</strong>
         <span>${esc(expression)}</span>
-        ${entry.detail ? `<small>${esc(entry.detail)}</small>` : ''}
+        ${entry.detail && !(entry.rolls?.length > 1) ? `<small>${esc(entry.detail)}</small>` : ''}
       </div>
       <div class="roll-log-meta"><strong>${esc(identity)}</strong><time datetime="${esc(entry.when || '')}">${esc(timestamp)}</time></div>
     </article>`;
@@ -1860,12 +1887,14 @@ function renderPlayerSheets() {
           const activeSheet = state.playerSheets.find((sheet) => sheet.id === root.dataset.activeSheetId);
           const character = activeSheet?.name || activeSheet?.player || '';
           const rollDetail = useSecond ? `${first}, ${second} → kept ${die}` : '';
-          showDiceRoll({ sides, die, total: die, label: mode ? `${mode} d${sides}` : `Custom d${sides}`, rollDetail });
+          const rolls = useSecond ? [first, second] : [first];
+          showDiceRoll({ sides, die, rolls, total: die, label: mode || 'Custom', rollDetail });
           recordRoll({
             label: mode ? `${mode} d${sides}` : `Custom d${sides}`,
             character,
             sides,
             die,
+            rolls,
             total: die,
             detail: rollDetail
           });
