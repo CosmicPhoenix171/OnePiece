@@ -1329,7 +1329,7 @@ function canEditSheet(sheet) {
   return isGmUser() || isSheetOwner(sheet);
 }
 
-/* Ensure the logged-in (non-GM) user has exactly one sheet of their own. */
+/* Ensure the logged-in (non-GM) user has at least one sheet of their own. */
 function ensureOwnSheet() {
   if (!currentUsername || isGmUser()) return;
   if (!Array.isArray(state.playerSheets)) state.playerSheets = [];
@@ -1362,6 +1362,8 @@ function addPlayerSheet() {
     sheet.pdfFields.character_name = currentUsername;
   }
   state.playerSheets.unshift(sheet);
+  const root = $('#player-sheet-list');
+  if (root) root.dataset.activeSheetId = sheet.id;
   save();
   renderPlayerSheets();
   showTab('characters');
@@ -1411,9 +1413,9 @@ function renderPlayerSheets() {
   // Make sure the logged-in player has their own sheet auto-created.
   ensureOwnSheet();
 
-  // Toggle the "+ Add Character Sheet" button so only the GM can add extras.
+  // Every logged-in player can add more characters; each new sheet remains theirs.
   const addBtn = document.querySelector('[data-action="addPlayerSheet"]');
-  if (addBtn) addBtn.style.display = isGmUser() ? '' : 'none';
+  if (addBtn) addBtn.style.display = currentUsername ? '' : 'none';
 
   const visible = visibleSheetsForCurrentUser();
 
