@@ -180,6 +180,11 @@ body {
   padding: 4px 10px;
   font-size: 0.82rem;
 }
+.install-hint {
+  margin: 7px 0 0;
+  color: #c9b78d;
+  font-size: 0.82rem;
+}
 
 .tabs {
   display: flex; flex-wrap: wrap; gap: 4px;

@@ -215,6 +215,42 @@ function initLogin() {
   try { ensureOwnSheet(); } catch (e) { console.error(e); }
 }
 
+function initAppInstall() {
+  const installButton = $('#install-app-btn');
+  const iosInstallHint = $('#ios-install-hint');
+  let installPrompt = null;
+
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches
+    || navigator.standalone === true;
+
+  if (iosInstallHint) iosInstallHint.hidden = !isIos || isInstalled;
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    installPrompt = event;
+    if (installButton) installButton.hidden = false;
+  });
+
+  if (installButton) {
+    installButton.addEventListener('click', async () => {
+      if (!installPrompt) return;
+      installButton.hidden = true;
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+      installPrompt = null;
+    });
+  }
+
+  window.addEventListener('appinstalled', () => {
+    installPrompt = null;
+    if (installButton) installButton.hidden = true;
+    if (iosInstallHint) iosInstallHint.hidden = true;
+  });
+}
+
 const DANGER_LABELS = { 1:"Safe or familiar area", 2:"Risky area", 3:"Dangerous area", 4:"Deadly area", 5:"Nightmare area" };
 const HEAT_LABELS   = { 0:"Unlisted", 1:"Local notice", 2:"Regional bounty", 3:"Known pirate crew", 4:"Major bounty", 5:"Government priority target" };
 
@@ -2920,6 +2956,7 @@ function addShipLogEntry() {
    =========================================================== */
 bindFields();
 bindShipFields();
+initAppInstall();
 initLogin();
 refreshStats();
 renderLog();
