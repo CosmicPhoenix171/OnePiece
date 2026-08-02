@@ -11,10 +11,17 @@
 <title>The Devil's Ransom</title>
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" sizes="192x192" href="assets/icon-192.png" />
-<link rel="stylesheet" href="styles.css?v=26" />
+<link rel="stylesheet" href="styles.css?v=28" />
 </head>
 <body>
 <div id="water-damage-overlay" class="water-damage-overlay" aria-hidden="true"></div>
+<div id="shared-image-broadcast-overlay" class="shared-image-broadcast-overlay" aria-hidden="true">
+  <div class="shared-image-broadcast-dialog" role="dialog" aria-modal="true" aria-labelledby="shared-image-broadcast-title">
+    <button type="button" id="close-shared-image-broadcast" class="shared-image-broadcast-close" aria-label="Close shared image" title="Close">×</button>
+    <img id="shared-image-broadcast-image" alt="" />
+    <h2 id="shared-image-broadcast-title"></h2>
+  </div>
+</div>
 <div id="dice-roll-overlay" class="dice-roll-overlay" aria-hidden="true">
   <div class="dice-roll-stage" role="status" aria-live="assertive">
     <div id="dice-roll-kind" class="dice-roll-kind">Roll</div>
@@ -39,6 +46,7 @@
 <nav class="tabs" id="tabs">
   <button class="tab" data-tab="bounty">Bounty</button>
   <button class="tab active" data-tab="map">Map</button>
+  <button class="tab" data-tab="images">Shared Images</button>
   <button class="tab" data-tab="ship">Ship Tracker</button>
   <button class="tab" data-tab="characters">Player Sheets</button>
   <button class="tab" data-tab="npcs" data-gm-only hidden>NPCs</button>
@@ -283,6 +291,23 @@
     </div>
   </section>
 
+  <!-- SHARED IMAGES -->
+  <section class="panel" id="tab-images">
+    <div class="parchment">
+      <div class="shared-images-header">
+        <div>
+          <h2>Shared Images</h2>
+          <p id="shared-images-summary" class="muted"></p>
+        </div>
+        <div data-gm-only hidden>
+          <button type="button" class="gold" data-action="uploadSharedImage">Upload Image</button>
+          <input type="file" id="shared-image-input" accept="image/*" class="hidden" aria-label="Upload a shared image" />
+        </div>
+      </div>
+      <div id="shared-image-list" class="shared-image-list" aria-live="polite"></div>
+    </div>
+  </section>
+
   <!-- SHIP TRACKER -->
   <section class="panel" id="tab-ship">
     <div class="parchment">
@@ -490,8 +515,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="pdf-sheet.js?v=10"></script>
-<script src="app.js?v=43"></script>
+<script src="app.js?v=47"></script>
 <script src="map.js"></script>
-<script src="sync.js?v=2"></script>
+<script src="sync.js?v=5"></script>
 </body>
 </html>

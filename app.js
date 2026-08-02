@@ -61,6 +61,8 @@ const DEFAULT_STATE = {
   rollLog: [],
   dicePreferences: {},
   npcEncounter: [],
+  sharedImages: [],
+  sharedImageBroadcast: null,
   mapMarkers: [],
   mapImageData: '',
   mapImageName: '',
@@ -82,25 +84,41 @@ function load() {
   }
 }
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if (!__applyingRemote && typeof window.syncPush === 'function') {
-    try { window.syncPush(state); } catch (e) { console.error('syncPush failed', e); }
+  let syncResult = Promise.resolve(false);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('Local save skipped; campaign data exceeds browser storage.', error);
   }
+  if (!__applyingRemote && typeof window.syncPush === 'function') {
+    try { syncResult = window.syncPush(state); } catch (e) { console.error('syncPush failed', e); }
+  }
+  return syncResult;
 }
 
 let __applyingRemote = false;
-function applyRemoteState(remote) {
+function applyRemoteState(remote, options = {}) {
   if (!remote || typeof remote !== 'object') return;
   // Preserve viewer-local fields (pan/zoom, UI toggles) across remote updates
   // so other players' edits never hijack this viewer's map viewport.
   const localMapView = state.mapView;
+  const incomingBroadcast = remote.sharedImageBroadcast;
+  const shouldPresentBroadcast = !options.initial
+    && !isGmUser()
+    && incomingBroadcast?.id
+    && incomingBroadcast.id !== state.sharedImageBroadcast?.id;
   __applyingRemote = true;
   try {
     Object.keys(state).forEach((k) => { delete state[k]; });
     Object.assign(state, structuredClone(DEFAULT_STATE), remote);
     if (localMapView) state.mapView = localMapView;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.warn('Remote state exceeds browser storage; keeping it in memory.', error);
+    }
     rerenderAll();
+    if (shouldPresentBroadcast) showSharedImageBroadcast(incomingBroadcast);
   } finally {
     __applyingRemote = false;
   }
@@ -115,6 +133,7 @@ function rerenderAll() {
   try { if (typeof renderTravel === 'function') renderTravel(); } catch (e) { console.error(e); }
   try { if (typeof renderShip === 'function') renderShip(); } catch (e) { console.error(e); }
   try { if (typeof renderMap === 'function') renderMap(); } catch (e) { console.error(e); }
+  try { if (typeof renderSharedImages === 'function') renderSharedImages(); } catch (e) { console.error(e); }
   try { if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields(); } catch (e) { console.error(e); }
   $$('[data-bind]').forEach((el) => {
     const key = el.dataset.bind;
@@ -168,6 +187,7 @@ function updateGmOnlyUI() {
     renderNpcEncounter();
     renderNpcCards();
   }
+  renderSharedImages();
 }
 
 function updateLoginUI() {
@@ -374,6 +394,7 @@ document.addEventListener('click', e => {
     case 'loadRouteTemplate': loadRouteTemplate(); break;
     case 'addShipLog':     addShipLogEntry(); break;
     case 'importMap':      importMapImage(); break;
+    case 'uploadSharedImage': if (isGmUser()) $('#shared-image-input')?.click(); break;
     case 'resetMapImage':  if (confirm('Remove the current map image?')) { state.mapImageData = ''; state.mapImageName = ''; save(); renderMap(); } break;
     case 'clearMap':       if (confirm('Remove all map markers?')) { state.mapMarkers = []; save(); renderMap(); } break;
     case 'centerShip':     centerOnShip(); break;
@@ -417,6 +438,273 @@ function showTab(name) {
   if (name === 'characters') {
     requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
   }
+}
+
+/* ===========================================================
+   SHARED IMAGES
+   =========================================================== */
+const MAX_SHARED_IMAGE_BYTES = 6 * 1024 * 1024;
+const SHARED_IMAGE_CACHE = 'sea-trouble-shared-images-v1';
+const sharedImageMemoryCache = new Map();
+const sharedImageLoads = new Map();
+const migratingSharedImages = new Set();
+
+function sharedImageCacheRequest(imageId) {
+  return new Request(`https://sea-trouble-image-cache.invalid/${encodeURIComponent(imageId)}`);
+}
+
+async function cacheSharedImageData(imageId, data) {
+  if (!imageId || !data) return;
+  sharedImageMemoryCache.set(imageId, data);
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open(SHARED_IMAGE_CACHE);
+    await cache.put(sharedImageCacheRequest(imageId), new Response(data));
+  } catch (error) {
+    console.warn('Persistent image cache unavailable.', error);
+  }
+}
+
+async function evictSharedImageData(imageId) {
+  sharedImageMemoryCache.delete(imageId);
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open(SHARED_IMAGE_CACHE);
+    await cache.delete(sharedImageCacheRequest(imageId));
+  } catch (error) {
+    console.warn('Could not remove cached image.', error);
+  }
+}
+
+async function resolveSharedImageData(image) {
+  if (!image?.id) return '';
+  if (image.data) {
+    await cacheSharedImageData(image.id, image.data);
+    return image.data;
+  }
+  if (sharedImageMemoryCache.has(image.id)) return sharedImageMemoryCache.get(image.id);
+  if (sharedImageLoads.has(image.id)) return sharedImageLoads.get(image.id);
+
+  const load = (async () => {
+    if ('caches' in window) {
+      try {
+        const cached = await caches.match(sharedImageCacheRequest(image.id));
+        if (cached) {
+          const data = await cached.text();
+          sharedImageMemoryCache.set(image.id, data);
+          return data;
+        }
+      } catch (error) {
+        console.warn('Could not read cached image.', error);
+      }
+    }
+    if (typeof window.fetchSharedImageData !== 'function') return '';
+    const data = await window.fetchSharedImageData(image.id);
+    if (data) await cacheSharedImageData(image.id, data);
+    return data;
+  })().finally(() => sharedImageLoads.delete(image.id));
+
+  sharedImageLoads.set(image.id, load);
+  return load;
+}
+
+function migrateEmbeddedSharedImage(image) {
+  if (!isGmUser() || !image?.id || !image.data || migratingSharedImages.has(image.id)
+      || typeof window.storeSharedImageData !== 'function') return;
+  migratingSharedImages.add(image.id);
+  cacheSharedImageData(image.id, image.data);
+  window.storeSharedImageData(image.id, image.data).then((stored) => {
+    if (!stored) return;
+    delete image.data;
+    save();
+  }).finally(() => migratingSharedImages.delete(image.id));
+}
+
+function sharedImages() {
+  if (!Array.isArray(state.sharedImages)) state.sharedImages = [];
+  return state.sharedImages;
+}
+
+function visibleSharedImages() {
+  const images = sharedImages();
+  return isGmUser() ? images : images.filter((image) => image.visibleToPlayers);
+}
+
+function renderSharedImages() {
+  const root = $('#shared-image-list');
+  const summary = $('#shared-images-summary');
+  if (!root) return;
+
+  const gm = isGmUser();
+  const allImages = sharedImages();
+  const images = visibleSharedImages();
+  if (summary) {
+    summary.textContent = gm
+      ? `${allImages.length} image${allImages.length === 1 ? '' : 's'} stored · ${allImages.filter((image) => image.visibleToPlayers).length} visible to players`
+      : `${images.length} image${images.length === 1 ? '' : 's'} shared with the crew`;
+  }
+
+  if (!images.length) {
+    root.innerHTML = `<p class="shared-images-empty muted">${gm ? 'Upload an image to share it with the players.' : 'The GM has not revealed any images yet.'}</p>`;
+    return;
+  }
+
+  root.innerHTML = images.map((image) => `<article class="shared-image-card${image.visibleToPlayers ? '' : ' concealed'}" data-shared-image-id="${esc(image.id)}">
+    <a href="#" target="_blank" rel="noopener" title="Open full-size image" aria-busy="true">
+      <img alt="${esc(image.name || 'Shared image')}" loading="lazy" />
+    </a>
+    <div class="shared-image-details">
+      ${gm
+        ? `<input type="text" data-shared-image-name value="${esc(image.name || '')}" maxlength="80" aria-label="Image name" />
+          <div class="shared-image-actions">
+            <label class="shared-image-visibility"><input type="checkbox" data-shared-image-visible ${image.visibleToPlayers ? 'checked' : ''} /> <span>${image.visibleToPlayers ? 'Visible to players' : 'Hidden from players'}</span></label>
+            <button type="button" class="gold" data-push-shared-image>Push to players</button>
+            <button type="button" class="danger" data-delete-shared-image>Delete</button>
+          </div>`
+        : `<strong>${esc(image.name || 'Shared image')}</strong>`}
+    </div>
+  </article>`).join('');
+
+  images.forEach((image) => {
+    migrateEmbeddedSharedImage(image);
+    const card = $$('.shared-image-card', root).find((element) => element.dataset.sharedImageId === image.id);
+    const link = card?.querySelector('a');
+    const imageElement = card?.querySelector('img');
+    if (!link || !imageElement) return;
+    resolveSharedImageData(image).then((data) => {
+      if (!data || !card.isConnected) return;
+      link.href = data;
+      link.removeAttribute('aria-busy');
+      imageElement.src = data;
+    });
+  });
+}
+
+function bindSharedImageGallery() {
+  const input = $('#shared-image-input');
+  if (!input) return;
+
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || !isGmUser()) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please choose an image file.');
+      return;
+    }
+    if (file.size > MAX_SHARED_IMAGE_BYTES) {
+      alert('Please choose an image smaller than 6 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const data = String(reader.result || '');
+      if (!data.startsWith('data:image/')) {
+        alert('The selected image could not be read.');
+        return;
+      }
+      const image = {
+        id: uid(),
+        name: file.name.replace(/\.[^.]+$/, '').slice(0, 80),
+        visibleToPlayers: false,
+        uploadedAt: new Date().toISOString()
+      };
+      await cacheSharedImageData(image.id, data);
+
+      if (typeof window.storeSharedImageData === 'function') {
+        const payloadConfirmed = await window.storeSharedImageData(image.id, data);
+        if (!payloadConfirmed) {
+          alert('Firebase did not confirm the image upload.');
+          return;
+        }
+      } else {
+        image.data = data;
+      }
+
+      sharedImages().unshift(image);
+      const firebaseConfirmed = await save();
+      renderSharedImages();
+      if (firebaseConfirmed) alert(`"${file.name}" uploaded to Firebase.`);
+      else alert('The image was added locally, but Firebase did not confirm the upload.');
+    };
+    reader.onerror = () => alert('The selected image could not be read.');
+    reader.readAsDataURL(file);
+  });
+
+  $('#shared-image-list')?.addEventListener('change', (event) => {
+    if (!isGmUser()) return;
+    const card = event.target.closest('[data-shared-image-id]');
+    const image = sharedImages().find((entry) => entry.id === card?.dataset.sharedImageId);
+    if (!image) return;
+    if (event.target.matches('[data-shared-image-visible]')) image.visibleToPlayers = event.target.checked;
+    if (event.target.matches('[data-shared-image-name]')) image.name = event.target.value.trim().slice(0, 80) || 'Shared image';
+    save();
+    renderSharedImages();
+  });
+
+  $('#shared-image-list')?.addEventListener('click', (event) => {
+    const pushButton = event.target.closest('[data-push-shared-image]');
+    if (pushButton && isGmUser()) {
+      const card = pushButton.closest('[data-shared-image-id]');
+      const image = sharedImages().find((entry) => entry.id === card?.dataset.sharedImageId);
+      if (!image) return;
+      state.sharedImageBroadcast = {
+        id: uid(),
+        imageId: image.id,
+        sentAt: new Date().toISOString()
+      };
+      save().then((firebaseConfirmed) => {
+        if (firebaseConfirmed) alert(`"${image.name || 'Shared image'}" pushed to live players.`);
+        else alert('Firebase did not confirm the image push.');
+      });
+      return;
+    }
+
+    const button = event.target.closest('[data-delete-shared-image]');
+    if (!button || !isGmUser()) return;
+    const card = button.closest('[data-shared-image-id]');
+    const index = sharedImages().findIndex((entry) => entry.id === card?.dataset.sharedImageId);
+    if (index < 0 || !confirm('Delete this shared image?')) return;
+    const imageId = state.sharedImages[index].id;
+    state.sharedImages.splice(index, 1);
+    evictSharedImageData(imageId);
+    if (typeof window.deleteSharedImageData === 'function') window.deleteSharedImageData(imageId);
+    save();
+    renderSharedImages();
+  });
+
+  const overlay = $('#shared-image-broadcast-overlay');
+  const closeBroadcast = () => {
+    if (!overlay) return;
+    overlay.classList.remove('active');
+    overlay.setAttribute('aria-hidden', 'true');
+  };
+  $('#close-shared-image-broadcast')?.addEventListener('click', closeBroadcast);
+  overlay?.addEventListener('click', (event) => {
+    if (event.target === overlay) closeBroadcast();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && overlay?.classList.contains('active')) closeBroadcast();
+  });
+}
+
+async function showSharedImageBroadcast(broadcast) {
+  if (isGmUser() || !broadcast?.imageId) return;
+  const image = sharedImages().find((entry) => entry.id === broadcast.imageId);
+  const overlay = $('#shared-image-broadcast-overlay');
+  const imageElement = $('#shared-image-broadcast-image');
+  const title = $('#shared-image-broadcast-title');
+  if (!image || !overlay || !imageElement || !title) return;
+
+  const data = await resolveSharedImageData(image);
+  if (!data) return;
+  imageElement.src = data;
+  imageElement.alt = image.name || 'Image shared by the GM';
+  title.textContent = image.name || 'Shared by the GM';
+  overlay.classList.add('active');
+  overlay.setAttribute('aria-hidden', 'false');
+  $('#close-shared-image-broadcast')?.focus();
 }
 
 /* ===========================================================
@@ -3019,12 +3307,14 @@ bindFields();
 bindShipFields();
 initAppInstall();
 initLogin();
+bindSharedImageGallery();
 refreshStats();
 renderLog();
 renderRollLog();
 renderPlayerSheets();
 initNpcTab();
 updateGmOnlyUI();
+renderSharedImages();
 renderTravel();
 renderShip();
 
