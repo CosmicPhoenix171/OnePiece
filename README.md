@@ -25,7 +25,8 @@ The app now asks for a username before editing tools unlock.
 2. The name is saved locally in your browser under `localStorage`.
 3. Use the top-bar **Switch User** button to change to another username.
 
-This is intentionally lightweight and not secure authentication; it is only an in-app identity label.
+Entering `cosmicphoenix171@gmail.com` grants admin access. This is intentionally
+lightweight and not secure authentication; it is only an in-app identity label.
 
 ## Realtime sync (Firebase)
 

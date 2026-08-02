@@ -5,6 +5,7 @@
 const STORAGE_KEY = 'seaTroubleSystem.v1';
 const USERNAME_KEY = 'seaTroubleUser.v1';
 const DEFAULT_MAP_IMAGE = 'assets/oneMap.jpeg';
+const ADMIN_EMAIL = 'cosmicphoenix171@gmail.com';
 
 /* ---------- Default state ---------- */
 const DEFAULT_RANSOM = [
@@ -1905,10 +1906,10 @@ function seedPdfFieldsFromLegacy(sheet) {
   }
 }
 
-/* True when the logged-in user has GM-level access (case-insensitive). */
+/* True when the logged-in user is the configured admin (case-insensitive). */
 function isGmUser() {
   return typeof currentUsername === 'string'
-    && currentUsername.trim().toLowerCase() === 'gm';
+    && currentUsername.trim().toLowerCase() === ADMIN_EMAIL;
 }
 
 /* True when `sheet.player` matches the logged-in user. Compared
