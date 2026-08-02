@@ -31,7 +31,7 @@ let mapRoutePick = { active: false, startMarkerId: null, allowMapPoint: false };
    Players see a dark fog over the map with a soft circular hole around
    each ship marker (and the moving ship on an active route).
    The GM (logged in as username "GM", case-insensitive) sees no fog. */
-const FOG_RADIUS = 55;      // map units around each ship (was 110, shrunk 50%)
+const FOG_RADIUS = 55;
 const FOG_OPACITY = 1;      // fully opaque fog
 const FOG_COLOR = '#7d7d7d'; // neutral gray
 
@@ -176,7 +176,7 @@ function renderMapMarkers() {
   if (!layer) return;
   const zoomScale = clamp(state.mapView?.zoom || 1, MAP_MIN_ZOOM, MAP_MAX_ZOOM);
   const inverseScale = 1 / zoomScale;
-  const labelScale = inverseScale * inverseScale;
+  const labelScale = inverseScale;
   const circleRadius = Number((11 * inverseScale).toFixed(2));
   const iconSize = Number((14 * inverseScale).toFixed(2));
   const iconOffsetY = Number((5 * inverseScale).toFixed(2));
@@ -188,9 +188,10 @@ function renderMapMarkers() {
     state.mapMarkers.map((m) => {
       const style = MAP_MARKER_STYLES[m.type] || MAP_MARKER_STYLES.marker;
       const pickClass = mapRoutePick.active && mapRoutePick.startMarkerId === m.id ? ' route-pick-start' : '';
+      const dotClass = m.type === 'ship' ? 'dot ship-dot' : 'dot';
       return `
         <g class="marker${pickClass}" data-id="${m.id}" data-copy="${copyIndex}" transform="translate(${toCanvasX(m.x, copyIndex)},${m.y})">
-          <circle class="dot" r="${circleRadius}" fill="${style.color}" />
+          <circle class="${dotClass}" r="${circleRadius}" fill="${style.color}" />
           <text y="${iconOffsetY}" text-anchor="middle" font-size="${iconSize}" pointer-events="none">${style.symbol}</text>
           <text class="lbl" y="${labelOffsetY}" font-size="${labelSize}" stroke-width="${strokeWidth}">${esc(m.name || '')}</text>
         </g>`;
@@ -289,15 +290,15 @@ function renderMapFog() {
     }
   }
 
-  const cutouts = positions.map((p) =>
-    `<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${FOG_RADIUS}" fill="url(#fog-hole-gradient)"/>`
+  const cutouts = positions.map((position) =>
+    `<circle cx="${position.x.toFixed(2)}" cy="${position.y.toFixed(2)}" r="${FOG_RADIUS}" fill="url(#fog-hole-gradient)"/>`
   ).join('');
 
   layer.innerHTML = `
     <defs>
       <radialGradient id="fog-hole-gradient">
-        <stop offset="0%"   stop-color="#000" stop-opacity="1"/>
-        <stop offset="65%"  stop-color="#000" stop-opacity="1"/>
+        <stop offset="0%" stop-color="#000" stop-opacity="1"/>
+        <stop offset="65%" stop-color="#000" stop-opacity="1"/>
         <stop offset="100%" stop-color="#000" stop-opacity="0"/>
       </radialGradient>
       <mask id="fog-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${MAP_CANVAS_WIDTH}" height="${MAP_HEIGHT}">

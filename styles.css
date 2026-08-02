@@ -1616,6 +1616,11 @@ ol.ref li, ul.ref li { margin: 3px 0; color: var(--ink); }
   stroke: #000;
   stroke-width: 1.5;
 }
+#map-svg .marker .ship-dot {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
 #map-svg .marker .lbl {
   font-family: 'Georgia', serif;
   fill: #ecdfc4;
