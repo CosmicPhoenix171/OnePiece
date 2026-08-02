@@ -1761,6 +1761,7 @@ function makeEmptySheet() {
     age: '',
     home: '',
     portrait: '',
+    portraitHidden: false,
     // Inventory
     inventory: [],
     // Stats
@@ -2052,7 +2053,7 @@ function renderPlayerSheets() {
   // last render, leave the cards alone and just refresh the field values.
   // This avoids re-rendering the PDF canvas on every Firebase sync update.
   const signature = visible
-    .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}|${s.portrait?.length || 0}`)
+    .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}|${s.portrait?.length || 0}|${Boolean(s.portraitHidden)}`)
     .join(';');
   if (root.dataset.sheetSig === signature && $$('.player-card', root).length === visible.length) {
     if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields();
@@ -2244,13 +2245,14 @@ function renderSheetHtml(pc, idx) {
   const canEdit = canEditSheet(pc);
   const dicePreferences = currentDicePreferences();
   const hasPortrait = Boolean(pc.portrait);
+  const portraitHidden = hasPortrait && Boolean(pc.portraitHidden);
   return `
   <article class="player-card pdf-sheet-card" data-pidx="${idx}" data-sheet-id="${esc(pc.id)}">
     <div class="sheet-actions-top btn-row">
       <span class="sheet-owner">Owner: <b>${esc(owner)}</b>${isGmUser() && !isMine ? ' <span class="muted">(viewing as GM)</span>' : ''}</span>
       ${canEdit ? `<button type="button" data-pa="choose-portrait">${hasPortrait ? 'Change Portrait' : 'Add Portrait'}</button>
       <input type="file" data-portrait-file accept="image/*" hidden />` : ''}
-      ${hasPortrait ? '<button type="button" data-pa="show-portrait" hidden>Show Portrait</button>' : ''}
+      ${hasPortrait ? `<button type="button" data-pa="show-portrait"${portraitHidden ? '' : ' hidden'}>Show Portrait</button>` : ''}
       <button type="button" data-pa="download-pdf" class="gold">📄 Download Filled PDF</button>
       ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
     </div>
@@ -2320,7 +2322,7 @@ function renderSheetHtml(pc, idx) {
       <div class="pdf-sheet-status muted" role="status" aria-live="polite">Loading fillable character sheet…</div>
       <canvas class="pdf-sheet-canvas"></canvas>
       <div class="pdf-sheet-widgets"></div>
-      ${hasPortrait ? `<div class="character-portrait-overlay">
+      ${hasPortrait ? `<div class="character-portrait-overlay"${portraitHidden ? ' hidden' : ''}>
         <img src="${pc.portrait}" alt="${esc(pc.name || 'Character')} portrait" />
         <button type="button" data-pa="hide-portrait">Hide Portrait</button>
       </div>` : ''}
@@ -2365,6 +2367,7 @@ function attachSheetHandlers(card, sheet, idx) {
       const liveSheet = getSheet();
       if (!liveSheet || typeof reader.result !== 'string') return;
       liveSheet.portrait = reader.result;
+      liveSheet.portraitHidden = false;
       stampSheetEdit(liveSheet);
       save();
       const root = $('#player-sheet-list');
@@ -2414,6 +2417,12 @@ function attachSheetHandlers(card, sheet, idx) {
         return;
       }
       if (act === 'hide-portrait') {
+        const liveSheet = getSheet();
+        if (liveSheet) {
+          liveSheet.portraitHidden = true;
+          stampSheetEdit(liveSheet);
+          save();
+        }
         card.querySelector('.character-portrait-overlay')?.setAttribute('hidden', '');
         const showButton = card.querySelector('[data-pa="show-portrait"]');
         if (showButton) showButton.hidden = false;
@@ -2421,6 +2430,12 @@ function attachSheetHandlers(card, sheet, idx) {
         return;
       }
       if (act === 'show-portrait') {
+        const liveSheet = getSheet();
+        if (liveSheet) {
+          liveSheet.portraitHidden = false;
+          stampSheetEdit(liveSheet);
+          save();
+        }
         card.querySelector('.character-portrait-overlay')?.removeAttribute('hidden');
         btn.hidden = true;
         return;
