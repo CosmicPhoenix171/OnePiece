@@ -2252,7 +2252,8 @@ function renderSheetHtml(pc, idx) {
       <span class="sheet-owner">Owner: <b>${esc(owner)}</b>${isGmUser() && !isMine ? ' <span class="muted">(viewing as GM)</span>' : ''}</span>
       ${canEdit ? `<button type="button" data-pa="choose-portrait">${hasPortrait ? 'Change Portrait' : 'Add Portrait'}</button>
       <input type="file" data-portrait-file accept="image/*" hidden />` : ''}
-      ${hasPortrait ? `<button type="button" data-pa="show-portrait"${portraitHidden ? '' : ' hidden'}>Show Portrait</button>` : ''}
+      ${hasPortrait ? `<button type="button" data-pa="hide-portrait"${portraitHidden ? ' hidden' : ''}>Hide Portrait</button>
+      <button type="button" data-pa="show-portrait"${portraitHidden ? '' : ' hidden'}>Show Portrait</button>` : ''}
       <button type="button" data-pa="download-pdf" class="gold">📄 Download Filled PDF</button>
       ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
     </div>
@@ -2324,7 +2325,6 @@ function renderSheetHtml(pc, idx) {
       <div class="pdf-sheet-widgets"></div>
       ${hasPortrait ? `<div class="character-portrait-overlay"${portraitHidden ? ' hidden' : ''}>
         <img src="${pc.portrait}" alt="${esc(pc.name || 'Character')} portrait" />
-        <button type="button" data-pa="hide-portrait">Hide Portrait</button>
       </div>` : ''}
     </div>
     <section class="sheet-extras parchment inset">
@@ -2424,6 +2424,7 @@ function attachSheetHandlers(card, sheet, idx) {
           save();
         }
         card.querySelector('.character-portrait-overlay')?.setAttribute('hidden', '');
+        btn.hidden = true;
         const showButton = card.querySelector('[data-pa="show-portrait"]');
         if (showButton) showButton.hidden = false;
         window.pdfSheet?.renderVisible?.();
@@ -2438,6 +2439,8 @@ function attachSheetHandlers(card, sheet, idx) {
         }
         card.querySelector('.character-portrait-overlay')?.removeAttribute('hidden');
         btn.hidden = true;
+        const hideButton = card.querySelector('[data-pa="hide-portrait"]');
+        if (hideButton) hideButton.hidden = false;
         return;
       }
       if (act === 'download-pdf') {
