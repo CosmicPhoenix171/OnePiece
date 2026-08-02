@@ -30,14 +30,14 @@ let mapRoutePick = { active: false, startMarkerId: null, allowMapPoint: false };
 /* ---------- Fog of war ----------
    Players see a dark fog over the map with a soft circular hole around
    each ship marker (and the moving ship on an active route).
-  The configured admin sees no fog. */
+   The GM (logged in as username "GM", case-insensitive) sees no fog. */
 const FOG_RADIUS = 55;      // map units around each ship (was 110, shrunk 50%)
 const FOG_OPACITY = 1;      // fully opaque fog
 const FOG_COLOR = '#7d7d7d'; // neutral gray
 
 function isGmUser() {
   return typeof currentUsername === 'string'
-    && currentUsername.trim().toLowerCase() === ADMIN_EMAIL;
+    && currentUsername.trim().toLowerCase() === 'gm';
 }
 
 function ensureMapView() {
