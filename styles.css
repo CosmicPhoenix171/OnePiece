@@ -1010,6 +1010,55 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   opacity: 0.85;
 }
 .pdf-sheet-wrap.readonly { filter: saturate(0.92); }
+.character-portrait-overlay {
+  position: absolute;
+  inset: 14% 2.5% 14%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: 7px;
+  background:
+    repeating-linear-gradient(0deg, rgba(42, 26, 10, 0.06) 0 1px, transparent 1px 3px),
+    var(--parchment-dark);
+  border: 3px solid #2a1a0a;
+  box-shadow:
+    0 0 0 2px var(--gold-dark),
+    0 5px 12px rgba(0, 0, 0, 0.48);
+  overflow: hidden;
+}
+.character-portrait-overlay[hidden] { display: none; }
+.character-portrait-overlay::before,
+.character-portrait-overlay::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+.character-portrait-overlay::before {
+  inset: 7px;
+  z-index: 2;
+  border: 2px solid rgba(42, 26, 10, 0.88);
+  box-shadow: 0 0 0 1px rgba(245, 199, 90, 0.48);
+}
+.character-portrait-overlay::after {
+  inset: 9px;
+  z-index: 1;
+  box-shadow: inset 0 0 24px rgba(20, 10, 3, 0.52);
+}
+.character-portrait-overlay img {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 28%;
+}
+.character-portrait-overlay button {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  box-shadow: var(--shadow);
+}
 .pdf-sheet-status {
   position: absolute;
   top: 8px;

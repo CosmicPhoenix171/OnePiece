@@ -2052,7 +2052,7 @@ function renderPlayerSheets() {
   // last render, leave the cards alone and just refresh the field values.
   // This avoids re-rendering the PDF canvas on every Firebase sync update.
   const signature = visible
-    .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}`)
+    .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}|${s.portrait?.length || 0}`)
     .join(';');
   if (root.dataset.sheetSig === signature && $$('.player-card', root).length === visible.length) {
     if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields();
@@ -2243,10 +2243,14 @@ function renderSheetHtml(pc, idx) {
   const isMine = isSheetOwner(pc);
   const canEdit = canEditSheet(pc);
   const dicePreferences = currentDicePreferences();
+  const hasPortrait = Boolean(pc.portrait);
   return `
   <article class="player-card pdf-sheet-card" data-pidx="${idx}" data-sheet-id="${esc(pc.id)}">
     <div class="sheet-actions-top btn-row">
       <span class="sheet-owner">Owner: <b>${esc(owner)}</b>${isGmUser() && !isMine ? ' <span class="muted">(viewing as GM)</span>' : ''}</span>
+      ${canEdit ? `<button type="button" data-pa="choose-portrait">${hasPortrait ? 'Change Portrait' : 'Add Portrait'}</button>
+      <input type="file" data-portrait-file accept="image/*" hidden />` : ''}
+      ${hasPortrait ? '<button type="button" data-pa="show-portrait" hidden>Show Portrait</button>' : ''}
       <button type="button" data-pa="download-pdf" class="gold">📄 Download Filled PDF</button>
       ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
     </div>
@@ -2316,6 +2320,10 @@ function renderSheetHtml(pc, idx) {
       <div class="pdf-sheet-status muted" role="status" aria-live="polite">Loading fillable character sheet…</div>
       <canvas class="pdf-sheet-canvas"></canvas>
       <div class="pdf-sheet-widgets"></div>
+      ${hasPortrait ? `<div class="character-portrait-overlay">
+        <img src="${pc.portrait}" alt="${esc(pc.name || 'Character')} portrait" />
+        <button type="button" data-pa="hide-portrait">Hide Portrait</button>
+      </div>` : ''}
     </div>
     <section class="sheet-extras parchment inset">
       <div class="grid">
@@ -2346,6 +2354,25 @@ function attachSheetHandlers(card, sheet, idx) {
     const s = getSheet() || sheet;
     return canEditSheet(s);
   };
+
+  const portraitFile = card.querySelector('[data-portrait-file]');
+  portraitFile?.addEventListener('change', () => {
+    if (!canEditLive()) return;
+    const file = portraitFile.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      const liveSheet = getSheet();
+      if (!liveSheet || typeof reader.result !== 'string') return;
+      liveSheet.portrait = reader.result;
+      stampSheetEdit(liveSheet);
+      save();
+      const root = $('#player-sheet-list');
+      if (root) root.dataset.sheetSig = '';
+      renderPlayerSheets();
+    });
+    reader.readAsDataURL(file);
+  });
 
   const metaEl = card.querySelector('.updated-meta');
   const refreshMeta = () => {
@@ -2382,6 +2409,22 @@ function attachSheetHandlers(card, sheet, idx) {
   $$('[data-pa]', card).forEach((btn) => {
     btn.addEventListener('click', () => {
       const act = btn.dataset.pa;
+      if (act === 'choose-portrait') {
+        portraitFile?.click();
+        return;
+      }
+      if (act === 'hide-portrait') {
+        card.querySelector('.character-portrait-overlay')?.setAttribute('hidden', '');
+        const showButton = card.querySelector('[data-pa="show-portrait"]');
+        if (showButton) showButton.hidden = false;
+        window.pdfSheet?.renderVisible?.();
+        return;
+      }
+      if (act === 'show-portrait') {
+        card.querySelector('.character-portrait-overlay')?.removeAttribute('hidden');
+        btn.hidden = true;
+        return;
+      }
       if (act === 'download-pdf') {
         const s = getSheet() || sheet;
         if (window.pdfSheet && typeof window.pdfSheet.download === 'function') {
