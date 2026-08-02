@@ -443,7 +443,7 @@ function showTab(name) {
 /* ===========================================================
    SHARED IMAGES
    =========================================================== */
-const MAX_SHARED_IMAGE_BYTES = 6 * 1024 * 1024;
+const SHARED_IMAGE_WARNING_BYTES = 6 * 1024 * 1024;
 const SHARED_IMAGE_CACHE = 'sea-trouble-shared-images-v1';
 const sharedImageMemoryCache = new Map();
 const sharedImageLoads = new Map();
@@ -592,9 +592,12 @@ function bindSharedImageGallery() {
       alert('Please choose an image file.');
       return;
     }
-    if (file.size > MAX_SHARED_IMAGE_BYTES) {
-      alert('Please choose an image smaller than 6 MB.');
-      return;
+    if (file.size > SHARED_IMAGE_WARNING_BYTES) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      const proceed = confirm(
+        `This image is ${sizeMb} MB. Large Base64 images use more Firebase bandwidth and may exceed Firebase Realtime Database's per-value limit. Upload anyway?`
+      );
+      if (!proceed) return;
     }
 
     const reader = new FileReader();

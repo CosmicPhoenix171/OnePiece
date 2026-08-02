@@ -576,20 +576,25 @@ function bindMapControls() {
     setMapZoom(state.mapView.zoom * factor, localX, localY);
   }, { passive: false });
 
-  viewport.addEventListener('mousedown', (event) => {
+  viewport.addEventListener('pointerdown', (event) => {
     if (!mapImageReady) return;
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
     if (event.target.closest('.marker')) return;
     mapPanState = {
+      pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY,
       startPanX: state.mapView.panX,
       startPanY: state.mapView.panY,
       moved: false
     };
+    try { viewport.setPointerCapture(event.pointerId); } catch {}
     viewport.classList.add('panning');
+    event.preventDefault();
   });
 
-  svg.addEventListener('mousedown', (event) => {
+  svg.addEventListener('pointerdown', (event) => {
+    if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
     const target = event.target.closest('.marker');
     if (!target) return;
     const marker = state.mapMarkers.find((entry) => entry.id === target.dataset.id);
@@ -619,16 +624,18 @@ function bindMapControls() {
     const markerCanvasX = toCanvasX(marker.x, copyIndex);
     mapDragState = {
       id: marker.id,
+      pointerId: event.pointerId,
       offX: point.canvasX - markerCanvasX,
       offY: point.y - marker.y,
       moved: false
     };
+    try { svg.setPointerCapture(event.pointerId); } catch {}
     event.stopPropagation();
     event.preventDefault();
   });
 
-  window.addEventListener('mousemove', (event) => {
-    if (mapDragState) {
+  window.addEventListener('pointermove', (event) => {
+    if (mapDragState && event.pointerId === mapDragState.pointerId) {
       const point = viewportPointToMapPoint(event.clientX, event.clientY);
       const marker = state.mapMarkers.find((entry) => entry.id === mapDragState.id);
       if (!marker) return;
@@ -638,22 +645,23 @@ function bindMapControls() {
       renderMapMarkers();
       return;
     }
-    if (mapPanState) {
+    if (mapPanState && event.pointerId === mapPanState.pointerId) {
       state.mapView.panX = Math.round(mapPanState.startPanX + (event.clientX - mapPanState.startClientX));
       state.mapView.panY = Math.round(mapPanState.startPanY + (event.clientY - mapPanState.startClientY));
       mapPanState.moved = true;
       renderMapView();
+      event.preventDefault();
     }
   });
 
-  window.addEventListener('mouseup', () => {
-    if (mapDragState) {
+  const finishMapPointer = (event) => {
+    if (mapDragState && event.pointerId === mapDragState.pointerId) {
       if (!mapDragState.moved) openMapEditor(mapDragState.id);
       else mapSuppressPlacement = true;
       save();
       mapDragState = null;
     }
-    if (mapPanState) {
+    if (mapPanState && event.pointerId === mapPanState.pointerId) {
       viewport.classList.remove('panning');
       if (mapPanState.moved) {
         mapSuppressPlacement = true;
@@ -661,7 +669,9 @@ function bindMapControls() {
       }
       mapPanState = null;
     }
-  });
+  };
+  window.addEventListener('pointerup', finishMapPointer);
+  window.addEventListener('pointercancel', finishMapPointer);
 
   svg.addEventListener('click', (event) => {
     if (!mapImageReady) return;
