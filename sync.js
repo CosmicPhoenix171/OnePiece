@@ -106,6 +106,17 @@
 
   let pushTimer = null;
   let pendingPushResolvers = [];
+
+  function preservePlayerLogs(snapshot, current) {
+    const remoteState = current?.state;
+    if (!remoteState || typeof remoteState !== 'object') return snapshot;
+    return {
+      ...snapshot,
+      playerNotes: remoteState.playerNotes || snapshot.playerNotes,
+      playerNoteDates: remoteState.playerNoteDates || snapshot.playerNoteDates
+    };
+  }
+
   window.syncPush = function (state) {
     if (pushTimer) clearTimeout(pushTimer);
     const { snapshot, payloads } = extractImagePayloads(state);
@@ -117,11 +128,12 @@
         setStatus('syncing', 'syncing…');
         const timestamp = Date.now();
         Promise.all(payloads.map((image) => imagesRef.child(image.id).set(image.data)))
-          .then(() => ref.update({
+          .then(() => dataRef.transaction((current) => ({
             _writerId: writerId,
             _ts: timestamp,
-            data: { _writerId: writerId, _ts: timestamp, state: snapshot }
-          }))
+            state: preservePlayerLogs(snapshot, current)
+          })))
+          .then(() => ref.update({ _writerId: writerId, _ts: timestamp }))
           .then(() => {
             setStatus('connected', 'live · ' + sessionId);
             resolvers.forEach((settle) => settle(true));
@@ -132,6 +144,30 @@
             resolvers.forEach((settle) => settle(false));
           });
       }, 300);
+    });
+  };
+
+  window.syncLogBook = function (owner, notes, dates) {
+    if (!owner) return Promise.resolve(false);
+    const timestamp = Date.now();
+    return dataRef.transaction((current) => {
+      const currentState = current?.state || (typeof window.__getState === 'function' ? window.__getState() : {});
+      return {
+        _writerId: writerId,
+        _ts: timestamp,
+        state: {
+          ...currentState,
+          playerNotes: { ...(currentState.playerNotes || {}), [owner]: String(notes || '') },
+          playerNoteDates: { ...(currentState.playerNoteDates || {}), [owner]: Array.isArray(dates) ? dates : [] }
+        }
+      };
+    }).then(() => {
+      setStatus('connected', 'live · ' + sessionId);
+      return true;
+    }).catch((err) => {
+      console.error('[sync] log book sync failed:', err);
+      setStatus('error', 'sync error');
+      return false;
     });
   };
 

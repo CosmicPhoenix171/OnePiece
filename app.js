@@ -97,11 +97,41 @@ function save() {
 }
 
 let __applyingRemote = false;
+const __pendingLogBooks = new Set();
+
+function logBookOwnerKey(username, notes = state.playerNotes) {
+  const requested = normalizeUsername(username);
+  const requestedKey = requested.toLowerCase();
+  const existing = Object.keys(notes || {})
+    .find((name) => normalizeUsername(name).toLowerCase() === requestedKey);
+  return existing || requested;
+}
+
+function saveLogBook(username) {
+  const owner = logBookOwnerKey(username);
+  if (!owner) return Promise.resolve(false);
+  const ownerKey = normalizeUsername(owner).toLowerCase();
+  __pendingLogBooks.add(ownerKey);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('Local save skipped; campaign data exceeds browser storage.', error);
+  }
+  if (typeof window.syncLogBook !== 'function') return Promise.resolve(false);
+  return window.syncLogBook(owner, state.playerNotes[owner], state.playerNoteDates[owner])
+    .then((saved) => {
+      if (saved) __pendingLogBooks.delete(ownerKey);
+      return saved;
+    });
+}
+
 function applyRemoteState(remote, options = {}) {
   if (!remote || typeof remote !== 'object') return;
   // Preserve viewer-local fields (pan/zoom, UI toggles) across remote updates
   // so other players' edits never hijack this viewer's map viewport.
   const localMapView = state.mapView;
+  const localPlayerNotes = state.playerNotes || {};
+  const localPlayerNoteDates = state.playerNoteDates || {};
   const incomingBroadcast = remote.sharedImageBroadcast;
   const shouldPresentBroadcast = !options.initial
     && !isGmUser()
@@ -112,6 +142,15 @@ function applyRemoteState(remote, options = {}) {
     Object.keys(state).forEach((k) => { delete state[k]; });
     Object.assign(state, structuredClone(DEFAULT_STATE), remote);
     if (localMapView) state.mapView = localMapView;
+    __pendingLogBooks.forEach((ownerKey) => {
+      const localOwner = Object.keys(localPlayerNotes).find((name) => normalizeUsername(name).toLowerCase() === ownerKey);
+      if (!localOwner) return;
+      const remoteOwner = logBookOwnerKey(localOwner, state.playerNotes);
+      state.playerNotes[remoteOwner] = localPlayerNotes[localOwner];
+      if (Array.isArray(localPlayerNoteDates[localOwner])) {
+        state.playerNoteDates[remoteOwner] = localPlayerNoteDates[localOwner];
+      }
+    });
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
@@ -1789,7 +1828,7 @@ function renderPlayerNotes(root) {
         const nextPages = notesPages(state.playerNotes[__notesViewing]);
         nextPages[Number(textarea.dataset.notesPage)] = textarea.value;
         state.playerNotes[__notesViewing] = nextPages.join('\f');
-        save();
+        saveLogBook(__notesViewing);
       });
     });
     $$('.log-book-page-date', root).forEach((dateInput) => {
@@ -1800,7 +1839,7 @@ function renderPlayerNotes(root) {
           : [];
         nextDates[Number(dateInput.dataset.notesDate)] = dateInput.value;
         state.playerNoteDates[__notesViewing] = nextDates;
-        save();
+        saveLogBook(__notesViewing);
       });
     });
 
@@ -1819,7 +1858,7 @@ function renderPlayerNotes(root) {
         nextDates.push('');
         state.playerNoteDates[__notesViewing] = nextDates;
         __notesPageByUser[__notesViewing] = nextPages.length - 1;
-        save();
+        saveLogBook(__notesViewing);
       }
       if (action === 'delete' && canEdit && pages.length > 1) {
         const nextPages = notesPages(state.playerNotes[__notesViewing]);
@@ -1831,7 +1870,7 @@ function renderPlayerNotes(root) {
         nextDates.splice(pageStart, 1);
         state.playerNoteDates[__notesViewing] = nextDates;
         __notesPageByUser[__notesViewing] = Math.min(pageStart, nextPages.length - 1);
-        save();
+        saveLogBook(__notesViewing);
       }
       root.dataset.notesSig = '';
       renderPlayerNotes(root);
