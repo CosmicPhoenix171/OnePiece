@@ -277,15 +277,13 @@ const HEAT_LABELS   = { 0:"Unlisted", 1:"Local notice", 2:"Regional bounty", 3:"
 /* ===========================================================
    Tab navigation
    =========================================================== */
-$$('#tabs .tab').forEach(t => t.addEventListener('click', () => {
-  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
-  $$('.panel').forEach(p => p.classList.remove('active'));
-  t.classList.add('active');
-  $('#tab-' + t.dataset.tab).classList.add('active');
-  if (t.dataset.tab === 'characters') {
-    requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
-  }
-}));
+const tabsMenuToggle = $('#tabs-menu-toggle');
+tabsMenuToggle?.addEventListener('click', () => {
+  const isOpen = $('#tabs').classList.toggle('menu-open');
+  tabsMenuToggle.setAttribute('aria-expanded', String(isOpen));
+});
+
+$$('#tabs .tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
 
 /* ===========================================================
    Two-way binding for dashboard fields
@@ -435,6 +433,8 @@ function showTab(name) {
   $$('.panel').forEach(p => p.classList.remove('active'));
   tab.classList.add('active');
   panel.classList.add('active');
+  $('#tabs').classList.remove('menu-open');
+  tabsMenuToggle?.setAttribute('aria-expanded', 'false');
   if (name === 'characters') {
     requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
   }
@@ -3037,9 +3037,9 @@ function deleteRoute(id) {
 }
 
 function renderTravel() {
-  if (typeof renderMapRoute === 'function') renderMapRoute();
-  // Active route
   const root = $('#travel-active');
+  if (!root) return;
+  // Active route
   const r = activeRoute();
   if (!r) {
     root.innerHTML = '<p class="muted">No active sea route. Create one to begin tracking.</p>';

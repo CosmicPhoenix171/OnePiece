@@ -44,14 +44,20 @@
 </header>
 
 <nav class="tabs" id="tabs">
-  <button class="tab" data-tab="bounty">Bounty</button>
-  <button class="tab active" data-tab="map">Map</button>
-  <button class="tab" data-tab="images">Shared Images</button>
-  <button class="tab" data-tab="ship">Ship Tracker</button>
-  <button class="tab" data-tab="characters">Player Sheets</button>
-  <button class="tab" data-tab="npcs" data-gm-only hidden>NPCs</button>
-  <button class="tab" data-tab="rolls">Roll Log</button>
-  <button class="tab" data-tab="log">Log Book</button>
+  <button type="button" id="tabs-menu-toggle" class="tabs-menu-toggle" aria-expanded="false" aria-controls="tabs-menu">
+    <span aria-hidden="true">☰</span>
+    <span>Menu</span>
+  </button>
+  <div id="tabs-menu" class="tabs-menu-list">
+    <button class="tab" data-tab="bounty">Bounty</button>
+    <button class="tab active" data-tab="map">Map</button>
+    <button class="tab" data-tab="images">Shared Images</button>
+    <button class="tab" data-tab="ship">Ship Tracker</button>
+    <button class="tab" data-tab="characters">Player Sheets</button>
+    <button class="tab" data-tab="npcs" data-gm-only hidden>NPCs</button>
+    <button class="tab" data-tab="rolls">Roll Log</button>
+    <button class="tab" data-tab="log">Log Book</button>
+  </div>
   <span class="sync-indicator" id="sync-indicator" title="Realtime sync status"><span class="dot"></span><span id="sync-label">offline</span></span>
 </nav>
 
@@ -101,8 +107,6 @@
     </div>
   </section>
 
-  <!-- SEA TRAVEL panel removed — content lives inside the Map sidebar (#map-travel-panel). -->
-
   <!-- MAP -->
   <section class="panel active" id="tab-map">
     <div class="map-shell">
@@ -126,17 +130,9 @@
           <button id="map-zoom-fit">Fit</button>
           <button id="map-zoom-in" title="Zoom in">+</button>
           <span id="map-zoom-label">100%</span>
-          <button class="gold" data-action="importMap">Import Game Map</button>
           <button data-action="centerShip">Center on Ship</button>
-          <button data-action="routeFromMap" id="route-from-map-btn">🧭 Route from 2 Markers</button>
-          <button data-action="toggleTravelPanel" id="toggle-travel-panel-btn">⛵ Sea Travel</button>
           <button data-action="clearMap" class="danger">Clear Markers</button>
         </div>
-      </div>
-      <input type="file" id="map-file-input" accept="image/*" class="hidden" aria-label="Import game map image" title="Import game map image" />
-      <div id="route-pick-status" class="route-pick-status hidden">
-        <span id="route-pick-text"></span>
-        <button type="button" id="route-pick-cancel" class="danger">Cancel</button>
       </div>
       <div class="map-body">
         <div id="map-wrap">
@@ -145,148 +141,15 @@
               <img class="map-image map-tile" data-copy="0" alt="Imported One Piece game map" draggable="false" />
               <img class="map-image map-tile" data-copy="1" alt="Imported One Piece game map" draggable="false" />
               <img class="map-image map-tile" data-copy="2" alt="Imported One Piece game map" draggable="false" />
-              <div id="map-empty-state">Add a repo-backed map image or import one to start using the game map.</div>
+              <div id="map-empty-state">Add a repo-backed map image to start using the game map.</div>
               <svg id="map-svg" viewBox="0 0 3000 600" preserveAspectRatio="none">
-                <g id="map-svg-routes"></g>
                 <g id="map-svg-markers"></g>
-                <g id="map-svg-ship"></g>
                 <g id="map-svg-fog"></g>
               </svg>
             </div>
           </div>
           <div id="map-editor"></div>
         </div>
-        <aside id="map-travel-panel" class="map-travel-panel">
-          <div class="travel-panel-head">
-            <h3>⛵ Sea Travel</h3>
-            <button class="travel-panel-close" data-action="toggleTravelPanel" aria-label="Close Sea Travel panel" title="Close Sea Travel panel">×</button>
-          </div>
-          <div class="travel-panel-body">
-            <section class="travel-block">
-              <h4>Active Route</h4>
-              <div id="travel-active"></div>
-              <div class="btn-row">
-                <button class="gold" data-action="newRoute">+ New Sea Route</button>
-                <button data-action="loadRouteTemplate">Load Template…</button>
-              </div>
-            </section>
-
-            <section class="travel-block hidden" id="travel-new-form">
-              <h4>New Sea Route</h4>
-              <div class="grid two">
-                <label>Start<input type="text" id="nr-start" placeholder="e.g. Loguetown" /></label>
-                <label>Destination<input type="text" id="nr-dest" placeholder="e.g. Reverse Mountain" /></label>
-                <label>Travel Days<input type="number" id="nr-days" min="1" max="60" value="5" /></label>
-                <label>Roll DC
-                  <select id="nr-dc">
-                    <option value="10">10 — Calm coastal</option>
-                    <option value="12" selected>12 — Open sea</option>
-                    <option value="14">14 — Rough sea</option>
-                    <option value="15">15 — Grand Line entry</option>
-                    <option value="17">17 — Storm sea / Calm Belt edge</option>
-                  </select>
-                </label>
-                <label>Danger Modifier<input type="number" id="nr-danger" min="0" max="10" value="0" /></label>
-                <label>Complication Limit<input type="number" id="nr-complim" min="1" max="10" value="3" /></label>
-                <label class="full">Crew Roles Rolling
-                  <div class="role-checks" id="nr-roles">
-                    <label class="role-check"><input type="checkbox" name="nr-role" value="Captain" checked /> Captain</label>
-                    <label class="role-check"><input type="checkbox" name="nr-role" value="Helmsmen" /> Helmsmen</label>
-                    <label class="role-check"><input type="checkbox" name="nr-role" value="Navigator" checked /> Navigator</label>
-                    <label class="role-check"><input type="checkbox" name="nr-role" value="Cook" /> Cook</label>
-                    <label class="role-check"><input type="checkbox" name="nr-role" value="Morale" /> Morale</label>
-                    <label class="role-check"><input type="checkbox" name="nr-role" value="Doctor" /> Doctor</label>
-                    <label class="role-check"><input type="checkbox" name="nr-role" value="Shipwright" /> Shipwright</label>
-                  </div>
-                </label>
-              </div>
-              <div id="nr-marker-status" class="muted nr-marker-status"></div>
-              <div class="btn-row">
-                <button class="gold" data-action="createRoute">Create Route</button>
-                <button data-action="cancelNewRoute">Cancel</button>
-              </div>
-            </section>
-
-            <details class="travel-block">
-              <summary>Route History</summary>
-              <div id="travel-history"></div>
-            </details>
-
-            <details class="travel-block">
-              <summary>📜 DM Reference — Sea Travel</summary>
-              <div class="travel-ref">
-                <h5>Distance Chart</h5>
-                <table class="ref">
-                  <thead><tr><th>Route Type</th><th>Days</th><th>DC</th></tr></thead>
-                  <tbody>
-                    <tr><td>Short coastal hop</td><td>1–2</td><td>10</td></tr>
-                    <tr><td>Inter-island, calm sea</td><td>3–5</td><td>12</td></tr>
-                    <tr><td>Open ocean crossing</td><td>5–8</td><td>14</td></tr>
-                    <tr><td>Grand Line leg</td><td>7–14</td><td>15</td></tr>
-                    <tr><td>Storm sea / Calm Belt edge</td><td>10–20</td><td>17</td></tr>
-                  </tbody>
-                </table>
-                <h5>Danger Modifier</h5>
-                <table class="ref">
-                  <thead><tr><th>Danger</th><th>Mod</th></tr></thead>
-                  <tbody>
-                    <tr><td>1 — Safe / familiar</td><td>+0</td></tr>
-                    <tr><td>2 — Risky</td><td>+1</td></tr>
-                    <tr><td>3 — Dangerous</td><td>+2</td></tr>
-                    <tr><td>4 — Deadly</td><td>+3</td></tr>
-                    <tr><td>5 — Nightmare</td><td>+5</td></tr>
-                  </tbody>
-                </table>
-                <p class="muted">Target = Travel Days + Danger Modifier. Default Complication Limit = 3.</p>
-                <h5>Progress Rules</h5>
-                <ul class="ref">
-                  <li>Nat 20 — +3 progress</li>
-                  <li>Beat DC by 5+ — +2 progress</li>
-                  <li>Meet / beat DC — +1 progress</li>
-                  <li>Fail by 1–4 — 0 progress</li>
-                  <li>Fail by 5+ — +1 complication</li>
-                  <li>Nat 1 — +1 complication + setback</li>
-                </ul>
-                <h5>Complications (d12)</h5>
-                <ol class="ref">
-                  <li>Storm front — 1d6 hull, lose 1 day.</li>
-                  <li>Off course — next roll disadvantage.</li>
-                  <li>Sea King sighting — Lookout DC+2.</li>
-                  <li>Sickness aboard — –1 to crew rolls.</li>
-                  <li>Supplies spoiled — –1 food &amp; water.</li>
-                  <li>Rigging fails — Shipwright DC or sails damage.</li>
-                  <li>Marine patrol on horizon.</li>
-                  <li>Rival pirate shadow.</li>
-                  <li>Mutiny whisper — –1 Morale.</li>
-                  <li>Cursed fog — Ransom Twist.</li>
-                  <li>Drifting wreck / castaway.</li>
-                  <li>Whirlpool / reef — DEX save.</li>
-                </ol>
-                <h5>Sailing Event (d10)</h5>
-                <ol class="ref">
-                  <li>Dead calm — first roll disadvantage.</li>
-                  <li>Following wind — +1 progress on first success.</li>
-                  <li>Strange tide — Navigator save or lose a day.</li>
-                  <li>Music on the water — Morale +1.</li>
-                  <li>Sea bird omen — foreshadow.</li>
-                  <li>Bottle in the waves — clue.</li>
-                  <li>Drifting cargo — +1 supply.</li>
-                  <li>Whale pod — peaceful.</li>
-                  <li>Storm building — +1 DC today.</li>
-                  <li>Ransom resonance.</li>
-                </ol>
-                <h5>Devil's Ransom During Travel</h5>
-                <ul class="ref">
-                  <li><b>1–3 pieces:</b> 1 cursed sea event per voyage.</li>
-                  <li><b>4–6 pieces:</b> +1 Complication Limit, 1 forced Twist.</li>
-                  <li><b>7–9 pieces:</b> Roll DC +1, named threat tracks ship.</li>
-                  <li><b>10–12 pieces:</b> Daily Ransom Twist.</li>
-                  <li><b>13 pieces:</b> Puzzle Key awakens — travel non-linear.</li>
-                </ul>
-              </div>
-            </details>
-          </div>
-        </aside>
       </div>
     </div>
   </section>
