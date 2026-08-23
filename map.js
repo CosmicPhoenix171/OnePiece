@@ -102,6 +102,8 @@ function renderMapView() {
   if (lastMarkerZoom !== state.mapView.zoom) renderMapMarkers();
   const label = $('#map-zoom-label');
   if (label) label.textContent = `${Math.round(state.mapView.zoom * 100)}%`;
+  const picker = $('#map-zoom-picker');
+  if (picker) picker.value = String(Math.round(state.mapView.zoom * 100 / 25) * 25);
 }
 
 function fitMapToViewport(saveState = true) {
@@ -292,6 +294,7 @@ function bindMapControls() {
   const viewport = getViewport();
   const svg = $('#map-svg');
   const zoomIn = $('#map-zoom-in');
+  const zoomPicker = $('#map-zoom-picker');
   if (!viewport || !svg || zoomIn?.dataset.bound === 'true') return;
   $('#map-zoom-out').dataset.bound = 'true';
   $('#map-zoom-fit').dataset.bound = 'true';
@@ -299,6 +302,7 @@ function bindMapControls() {
   zoomIn.addEventListener('click', () => setMapZoom(state.mapView.zoom * 1.2));
   $('#map-zoom-out').addEventListener('click', () => setMapZoom(state.mapView.zoom / 1.2));
   $('#map-zoom-fit').addEventListener('click', () => fitMapToViewport());
+  zoomPicker?.addEventListener('input', () => setMapZoom(Number(zoomPicker.value) / 100));
 
   viewport.addEventListener('wheel', (event) => {
     if (!mapImageReady) return;

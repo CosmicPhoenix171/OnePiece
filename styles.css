@@ -1621,6 +1621,7 @@ ol.ref li, ul.ref li { margin: 3px 0; color: var(--ink); }
   color: #fff5d8;
   font-weight: bold;
 }
+.map-zoom-picker { display: none; }
 #map-status {
   min-height: 1.3rem;
   margin: 0 0 8px;
@@ -1788,6 +1789,19 @@ ol.ref li, ul.ref li { margin: 3px 0; color: var(--ink); }
     overscroll-behavior-x: contain;
   }
   .map-toolbar > * { flex: 0 0 auto; }
+  .map-zoom-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    color: #ecdfc4;
+    font-size: 0.82rem;
+  }
+  .map-zoom-picker input {
+    width: clamp(120px, 24vw, 190px);
+    margin: 0;
+    accent-color: var(--gold-bright);
+  }
   #map-editor:not(:empty) {
     left: 12px;
     right: 12px;
@@ -1817,6 +1831,7 @@ ol.ref li, ul.ref li { margin: 3px 0; color: var(--ink); }
   .map-toolbar select { min-height: 40px; }
   .map-toolbar label.inline { font-size: 0.82rem; }
   #map-zoom-label { min-width: 48px; }
+  .map-zoom-picker input { width: 130px; }
   .map-body { gap: 10px; }
   .map-body > #map-wrap { flex-basis: clamp(260px, 48vh, 380px); }
   #map-editor:not(:empty) {
