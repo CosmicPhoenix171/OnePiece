@@ -54,8 +54,25 @@
     return copy;
   }
 
+  function normalizeLogBookData(state) {
+    const notes = state?.playerNotes && typeof state.playerNotes === 'object'
+      ? state.playerNotes
+      : {};
+    const dates = state?.playerNoteDates && typeof state.playerNoteDates === 'object'
+      ? state.playerNoteDates
+      : {};
+    return {
+      ...state,
+      playerNotes: Object.fromEntries(Object.entries(notes).map(([owner, value]) => [owner, String(value || '')])),
+      playerNoteDates: Object.fromEntries(Object.entries(dates).map(([owner, value]) => [
+        owner,
+        Array.isArray(value) ? Array.from(value, (date) => String(date || '')) : []
+      ]))
+    };
+  }
+
   function extractImagePayloads(state) {
-    const snapshot = structuredClone(stripLocalOnly(state));
+    const snapshot = normalizeLogBookData(structuredClone(stripLocalOnly(state)));
     const payloads = [];
     if (Array.isArray(snapshot.sharedImages)) {
       snapshot.sharedImages = snapshot.sharedImages.map((image) => {
@@ -110,11 +127,11 @@
   function preservePlayerLogs(snapshot, current) {
     const remoteState = current?.state;
     if (!remoteState || typeof remoteState !== 'object') return snapshot;
-    return {
+    return normalizeLogBookData({
       ...snapshot,
       playerNotes: remoteState.playerNotes || snapshot.playerNotes,
       playerNoteDates: remoteState.playerNoteDates || snapshot.playerNoteDates
-    };
+    });
   }
 
   window.syncPush = function (state) {
@@ -152,14 +169,15 @@
     const timestamp = Date.now();
     return dataRef.transaction((current) => {
       const currentState = current?.state || (typeof window.__getState === 'function' ? window.__getState() : {});
+      const nextState = normalizeLogBookData({
+        ...currentState,
+        playerNotes: { ...(currentState.playerNotes || {}), [owner]: String(notes || '') },
+        playerNoteDates: { ...(currentState.playerNoteDates || {}), [owner]: Array.isArray(dates) ? dates : [] }
+      });
       return {
         _writerId: writerId,
         _ts: timestamp,
-        state: {
-          ...currentState,
-          playerNotes: { ...(currentState.playerNotes || {}), [owner]: String(notes || '') },
-          playerNoteDates: { ...(currentState.playerNoteDates || {}), [owner]: Array.isArray(dates) ? dates : [] }
-        }
+        state: nextState
       };
     }).then(() => {
       setStatus('connected', 'live · ' + sessionId);
