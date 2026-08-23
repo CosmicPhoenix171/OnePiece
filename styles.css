@@ -985,6 +985,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   font-size: 0.9rem;
   color: #4a2a0a;
 }
+.mobile-skill-summary { display: none; }
 .sheet-reference-grid {
   position: relative;
   z-index: 5;
@@ -1201,7 +1202,8 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   }
   .pdf-sheet-card .sheet-actions-top,
   .pdf-sheet-card .sheet-extras,
-  .pdf-sheet-card .updated-meta { margin-right: 10px; margin-left: 10px; }
+  .pdf-sheet-card .updated-meta,
+  .pdf-sheet-card .mobile-skill-summary { margin-right: 10px; margin-left: 10px; }
   .pdf-sheet-card .sheet-actions-top {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1214,6 +1216,38 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   }
   .pdf-sheet-card .sheet-actions-top [data-pa="download-pdf"],
   .pdf-sheet-card .sheet-actions-top [data-pa="delete"] { grid-column: 1 / -1; }
+  .mobile-skill-summary {
+    display: block;
+    margin-bottom: 10px;
+    border: 1px solid var(--gold-dark);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.45);
+    color: var(--ink);
+  }
+  .mobile-skill-summary summary {
+    padding: 9px 10px;
+    color: #4a2a0a;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .mobile-skill-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 10px;
+    padding: 0 10px 10px;
+  }
+  .mobile-skill-grid div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px dashed rgba(138,106,31,0.4);
+    font-size: 0.82rem;
+  }
+  .mobile-skill-grid b {
+    color: #7a1f1f;
+    font-variant-numeric: tabular-nums;
+  }
   .pdf-sheet-wrap { border-right: 0; border-left: 0; }
 }
 .character-portrait-overlay {

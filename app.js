@@ -2576,6 +2576,11 @@ function renderSheetHtml(pc, idx) {
   const dicePreferences = currentDicePreferences();
   const hasPortrait = Boolean(pc.portrait);
   const portraitHidden = hasPortrait && Boolean(pc.portraitHidden);
+  const skillSummary = Object.keys(PDF_SKILL_ABILITIES).map((skill) => {
+    const name = skill.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const modifier = pc.pdfFields?.[`skill_${skill}_modifier`] || '—';
+    return `<div><span>${esc(name)}</span><b>${esc(modifier)}</b></div>`;
+  }).join('');
   return `
   <article class="player-card pdf-sheet-card" data-pidx="${idx}" data-sheet-id="${esc(pc.id)}">
     <div class="sheet-actions-top btn-row">
@@ -2587,6 +2592,10 @@ function renderSheetHtml(pc, idx) {
       <button type="button" data-pa="download-pdf" class="gold">📄 Download Filled PDF</button>
       ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
     </div>
+    <details class="mobile-skill-summary" open>
+      <summary>Skills</summary>
+      <div class="mobile-skill-grid">${skillSummary}</div>
+    </details>
     <div class="sheet-reference-grid" aria-label="Roll reference tables">
       <details class="sheet-reference sheet-reference-outcomes">
         <summary>Roll Outcomes</summary>
