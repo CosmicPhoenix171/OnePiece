@@ -1798,20 +1798,16 @@ function renderPlayerNotes(root) {
           aria-label="Log Book page ${pageIndex + 1}"
           placeholder="Set down the day’s course, discoveries, and promises…"
           ${pageIndex >= pages.length ? 'disabled' : (canEdit ? '' : 'readonly')}>${esc(pages[pageIndex] || '')}</textarea>
-        <span class="log-book-page-number">${pageIndex < pages.length ? pageIndex + 1 : ''}</span>
+        <div class="log-book-page-footer">
+          ${side === 0 ? `<button type="button" data-book-action="previous" aria-label="Previous pages" title="Previous pages" ${pageStart === 0 ? 'disabled' : ''}>←</button>` : ''}
+          <span class="log-book-page-number">${pageIndex < pages.length ? pageIndex + 1 : ''}</span>
+          ${side === 1 ? `<button type="button" data-book-action="next" aria-label="Next pages" title="Next pages" ${pageStart + pageStep >= pages.length ? 'disabled' : ''}>→</button>` : ''}
+          ${side === 0 ? `<button type="button" class="log-book-next-mobile" data-book-action="next" aria-label="Next pages" title="Next pages" ${pageStart + pageStep >= pages.length ? 'disabled' : ''}>→</button>` : ''}
+        </div>
       </section>`).join('');
 
     root.innerHTML = `
-      <div class="log-book-toolbar">
-        ${selectorHtml}
-        <div class="log-book-actions">
-          <button type="button" data-book-action="previous" aria-label="Previous pages" title="Previous pages" ${pageStart === 0 ? 'disabled' : ''}>←</button>
-          <span class="log-book-position">${pageStart + 1}${pageStep === 2 && pageStart + 1 < pages.length ? `–${Math.min(pageStart + 2, pages.length)}` : ''} of ${pages.length}</span>
-          <button type="button" data-book-action="next" aria-label="Next pages" title="Next pages" ${pageStart + pageStep >= pages.length ? 'disabled' : ''}>→</button>
-          ${canEdit ? '<button type="button" data-book-action="add" title="Add page">+ Page</button>' : ''}
-          ${canEdit ? `<button type="button" data-book-action="delete" class="danger" title="Delete current page" ${pages.length === 1 ? 'disabled' : ''}>Delete page</button>` : ''}
-        </div>
-      </div>
+      ${selectorHtml ? `<div class="log-book-toolbar">${selectorHtml}</div>` : ''}
       <div class="log-book" aria-label="Log Book">
         <div class="log-book-spread">${pageHtml}</div>
       </div>`;
@@ -1826,9 +1822,24 @@ function renderPlayerNotes(root) {
       textarea.addEventListener('input', () => {
         if (!isOwnLogBook(__notesViewing)) return;
         const nextPages = notesPages(state.playerNotes[__notesViewing]);
-        nextPages[Number(textarea.dataset.notesPage)] = textarea.value;
+        const pageIndex = Number(textarea.dataset.notesPage);
+        const isLastPage = pageIndex === nextPages.length - 1;
+        nextPages[pageIndex] = textarea.value;
+        if (isLastPage && textarea.value) {
+          nextPages.push('', '');
+          const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
+            ? [...state.playerNoteDates[__notesViewing]]
+            : [];
+          nextDates.push('', '');
+          state.playerNoteDates[__notesViewing] = nextDates;
+        }
         state.playerNotes[__notesViewing] = nextPages.join('\f');
         saveLogBook(__notesViewing);
+        if (isLastPage && textarea.value) {
+          root.dataset.notesSig = '';
+          renderPlayerNotes(root);
+          $(`[data-notes-page="${pageIndex}"]`, root)?.focus();
+        }
       });
     });
     $$('.log-book-page-date', root).forEach((dateInput) => {
@@ -1848,30 +1859,6 @@ function renderPlayerNotes(root) {
       const step = notesPagesPerView();
       if (action === 'previous') __notesPageByUser[__notesViewing] = Math.max(0, pageStart - step);
       if (action === 'next') __notesPageByUser[__notesViewing] = Math.min(pages.length - 1, pageStart + step);
-      if (action === 'add' && canEdit) {
-        const nextPages = notesPages(state.playerNotes[__notesViewing]);
-        nextPages.push('');
-        state.playerNotes[__notesViewing] = nextPages.join('\f');
-        const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
-          ? [...state.playerNoteDates[__notesViewing]]
-          : [];
-        nextDates.push('');
-        state.playerNoteDates[__notesViewing] = nextDates;
-        __notesPageByUser[__notesViewing] = nextPages.length - 1;
-        saveLogBook(__notesViewing);
-      }
-      if (action === 'delete' && canEdit && pages.length > 1) {
-        const nextPages = notesPages(state.playerNotes[__notesViewing]);
-        nextPages.splice(pageStart, 1);
-        state.playerNotes[__notesViewing] = nextPages.join('\f');
-        const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
-          ? [...state.playerNoteDates[__notesViewing]]
-          : [];
-        nextDates.splice(pageStart, 1);
-        state.playerNoteDates[__notesViewing] = nextDates;
-        __notesPageByUser[__notesViewing] = Math.min(pageStart, nextPages.length - 1);
-        saveLogBook(__notesViewing);
-      }
       root.dataset.notesSig = '';
       renderPlayerNotes(root);
       $('.notes-page-text', root)?.focus();

@@ -558,24 +558,6 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   color: #4a2a0a;
 }
 .notes-select-label select { min-width: 180px; }
-.log-book-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-.log-book-actions button {
-  min-width: 38px;
-  min-height: 36px;
-  padding: 6px 10px;
-}
-.log-book-position {
-  min-width: 76px;
-  color: #5a3a14;
-  font-size: 0.82rem;
-  font-weight: bold;
-  text-align: center;
-}
 .log-book {
   position: relative;
   padding: 14px;
@@ -676,12 +658,25 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
 }
 .log-book-page-number {
   min-height: 20px;
-  padding-top: 8px;
   color: #715433;
   font-size: 0.82rem;
   font-style: italic;
   text-align: center;
 }
+.log-book-page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding-top: 8px;
+}
+.log-book-page-footer button {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 3px 7px;
+}
+.log-book-next-mobile { display: none; }
 .notes-page-text[readonly] {
   color: #3d2a10;
   cursor: default;
@@ -690,13 +685,12 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   .log-book-toolbar { align-items: stretch; }
   .notes-select-label { width: 100%; }
   .notes-select-label select { flex: 1; min-width: 0; }
-  .log-book-actions { width: 100%; margin-left: 0; flex-wrap: wrap; }
-  .log-book-position { flex: 1; }
   .log-book { padding: 8px; }
   .log-book-spread { grid-template-columns: minmax(0, 1fr); min-height: 480px; }
   .log-book-spread::after, .log-book-page-right { display: none; }
   .log-book-page { padding: 24px 20px 16px; border-radius: 3px; }
   .notes-page-text { min-height: 390px; font-size: 0.95rem; }
+  .log-book-next-mobile { display: inline-flex; }
 }
 .encounter-archive {
   margin-top: 16px;
