@@ -4,7 +4,13 @@ A web-based DM tool for a One Piece inspired D&D campaign.
 
 ## Run it
 
-Just open `index.html` in any modern browser. No build step, no server, no dependencies.
+Host the repository with GitHub Pages and open the deployed HTTPS site. The embedded fillable character sheet and install manifest require a web origin and will not load when `index.html` is opened directly as a `file://` page.
+
+For this repository, the GitHub Pages URL is:
+
+<https://cosmicphoenix171.github.io/OnePiece/>
+
+Enable Pages in the repository settings under **Pages**, choose the `main` branch as the source, and open the generated HTTPS URL. No build step or dependencies are required.
 All campaign data auto-saves to your browser's `localStorage`.
 
 For best results, keep the same browser/profile so the local save stays available.
