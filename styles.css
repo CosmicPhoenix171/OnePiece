@@ -27,6 +27,17 @@ body {
   line-height: 1.45;
 }
 
+.fire-damage-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 79;
+  overflow: clip;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.fire-damage-canvas { display: block; }
+
 .water-damage-overlay {
   position: fixed;
   right: 0;
@@ -132,6 +143,8 @@ body {
   .shared-image-broadcast-dialog img { max-height: calc(100vh - 110px); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .fire-damage-overlay { transition: none; }
+  .fire-damage-overlay::before { animation: none; }
   .water-damage-overlay { transition: none; }
   .water-damage-overlay::before { animation: none; }
 }

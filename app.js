@@ -3265,12 +3265,127 @@ function bindShipFields() {
   }));
 }
 
+let fireEffectCanvas = null;
+let fireEffectAnimId = 0;
+let fireEffectDamage = 0;
+
+function ensureFireEffectCanvas(overlay) {
+  if (fireEffectCanvas) return fireEffectCanvas;
+  fireEffectCanvas = document.createElement('canvas');
+  fireEffectCanvas.className = 'fire-damage-canvas';
+  fireEffectCanvas.setAttribute('aria-hidden', 'true');
+  overlay.appendChild(fireEffectCanvas);
+  window.addEventListener('resize', resizeFireEffectCanvas);
+  return fireEffectCanvas;
+}
+
+function resizeFireEffectCanvas() {
+  if (!fireEffectCanvas) return;
+  const pr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  fireEffectCanvas.width  = Math.round(w * pr);
+  fireEffectCanvas.height = Math.round(h * pr);
+  fireEffectCanvas.style.width  = `${w}px`;
+  fireEffectCanvas.style.height = `${h}px`;
+  fireEffectCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0);
+}
+
+/* Layered sin waves produce a continuous pseudo-random flame height, 0..~1 */
+function _fht(p, t, ph) {
+  return Math.max(0,
+    Math.sin(p * 0.055 + t * 2.8  + ph)       * 0.38 +
+    Math.sin(p * 0.120 - t * 4.1  + ph * 1.7) * 0.29 +
+    Math.sin(p * 0.230 + t * 5.9  + ph * 0.6) * 0.18 +
+    Math.sin(p * 0.380 - t * 2.3  + ph * 2.4) * 0.10 +
+    Math.sin(p * 0.610 + t * 7.4  + ph * 1.2) * 0.05
+  ) * 1.15;
+}
+
+/* Draw one pass of triangular flame tongues along one screen edge.
+   edge: 0=bottom, 1=top, 2=left, 3=right */
+function _edgePass(ctx, W, H, t, edge, maxH, colW, ph, a, r0,g0,b0, r1,g1,b1, r2,g2,b2) {
+  const len = edge < 2 ? W : H;
+  const hw  = colW * 0.72;
+  for (let p = 0; p < len; p += colW) {
+    const h = maxH * _fht(p, t, ph);
+    if (h < 1.5) continue;
+    let grd;
+    ctx.beginPath();
+    if (edge === 0) {
+      grd = ctx.createLinearGradient(p, H, p, H - h);
+      ctx.moveTo(p - hw, H);  ctx.lineTo(p + hw, H);  ctx.lineTo(p, H - h);
+    } else if (edge === 1) {
+      grd = ctx.createLinearGradient(p, 0, p, h);
+      ctx.moveTo(p - hw, 0);  ctx.lineTo(p + hw, 0);  ctx.lineTo(p, h);
+    } else if (edge === 2) {
+      grd = ctx.createLinearGradient(0, p, h, p);
+      ctx.moveTo(0, p - hw);  ctx.lineTo(0, p + hw);  ctx.lineTo(h, p);
+    } else {
+      grd = ctx.createLinearGradient(W, p, W - h, p);
+      ctx.moveTo(W, p - hw);  ctx.lineTo(W, p + hw);  ctx.lineTo(W - h, p);
+    }
+    ctx.closePath();
+    grd.addColorStop(0,    `rgba(${r0},${g0},${b0},${a})`);
+    grd.addColorStop(0.38, `rgba(${r1},${g1},${b1},${(a * 0.82).toFixed(3)})`);
+    grd.addColorStop(0.72, `rgba(${r2},${g2},${b2},${(a * 0.42).toFixed(3)})`);
+    grd.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.fillStyle = grd;
+    ctx.fill();
+  }
+}
+
+function drawFireEffect(ts) {
+  if (!fireEffectCanvas || !fireEffectDamage) { fireEffectAnimId = 0; return; }
+  const ctx = fireEffectCanvas.getContext('2d');
+  const W = window.innerWidth, H = window.innerHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  const t = ts * 0.001;
+  const d = fireEffectDamage / 100;
+  const mH = 24 + d * 86; // flame height scales with damage
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (let edge = 0; edge < 4; edge++) {
+    const ph = edge * 2.31;
+    // dark smoke/ember base — tallest, lowest alpha
+    _edgePass(ctx, W, H, t,       edge, mH * 1.9, 12, ph,       d * 0.48, 190,38,6,  120,18,4,  70,8,2);
+    // orange flame body — medium
+    _edgePass(ctx, W, H, t,       edge, mH * 1.1,  8, ph + 1.1, d * 0.70, 255,140,20, 255,65,8,  200,25,5);
+    // white-hot core — shortest, brightest
+    _edgePass(ctx, W, H, t + 0.5, edge, mH * 0.58, 5, ph + 2.2, d * 0.88, 255,255,200, 255,220,80, 255,110,18);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    fireEffectAnimId = requestAnimationFrame(drawFireEffect);
+  } else {
+    fireEffectAnimId = 0;
+  }
+}
+
+function updateFireDamageEffect(damage) {
+  const overlay = $('#fire-damage-overlay');
+  if (!overlay) return;
+  fireEffectDamage = damage;
+  overlay.classList.toggle('active', damage > 0);
+  overlay.style.opacity = damage > 0 ? '1' : '0';
+  if (!damage) {
+    if (fireEffectAnimId) cancelAnimationFrame(fireEffectAnimId);
+    fireEffectAnimId = 0;
+    return;
+  }
+  ensureFireEffectCanvas(overlay);
+  resizeFireEffectCanvas();
+  if (!fireEffectAnimId) fireEffectAnimId = requestAnimationFrame(drawFireEffect);
+}
+
 function renderShip() {
   const s = state.ship;
   if (!Array.isArray(s.crew)) s.crew = [];
   if (!Array.isArray(s.log)) s.log = [];
   s.fireDamage = clamp(Number(s.fireDamage) || 0, 0, 100);
   s.waterDamage = clamp(Number(s.waterDamage) || 0, 0, 100);
+  updateFireDamageEffect(s.fireDamage);
   const waterOverlay = $('#water-damage-overlay');
   if (waterOverlay) {
     waterOverlay.style.height = `${s.waterDamage}vh`;
