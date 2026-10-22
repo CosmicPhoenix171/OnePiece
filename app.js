@@ -317,7 +317,6 @@ function initAppInstall() {
 }
 
 const DANGER_LABELS = { 1:"Safe or familiar area", 2:"Risky area", 3:"Dangerous area", 4:"Deadly area", 5:"Nightmare area" };
-const HEAT_LABELS   = { 0:"Unlisted", 1:"Local notice", 2:"Regional bounty", 3:"Known pirate crew", 4:"Major bounty", 5:"Government priority target" };
 
 /* ===========================================================
    Tab navigation
@@ -357,14 +356,10 @@ function bindFields() {
 function refreshStats() {
   const statDanger = $('#stat-danger');
   const statDangerLabel = $('#stat-danger-label');
-  const statHeat = $('#stat-heat');
-  const statHeatLabel = $('#stat-heat-label');
   const statPieces = $('#stat-pieces');
   const statDc = $('#stat-dc');
   if (statDanger) statDanger.textContent = state.danger;
   if (statDangerLabel) statDangerLabel.textContent = DANGER_LABELS[state.danger];
-  if (statHeat) statHeat.textContent = state.heat;
-  if (statHeatLabel) statHeatLabel.textContent = HEAT_LABELS[state.heat];
   if (statPieces) statPieces.textContent = `${state.piecesHeld} / 13`;
   if (statDc) statDc.textContent = 10 + Number(state.piecesHeld);
 
@@ -375,11 +370,6 @@ function refreshStats() {
   if (clockVal) clockVal.textContent = state.clock;
   if (clockFill) clockFill.style.width = (state.clock/6*100) + '%';
   if (clockAlert) clockAlert.classList.toggle('hidden', state.clock < 6);
-
-  // Heat tab
-  $('#heat-val').textContent = state.heat;
-  $('#heat-fill').style.width = (state.heat/5*100) + '%';
-  $('#heat-label-big').textContent = HEAT_LABELS[state.heat];
 
   // Ransom
   const ransomDc = $('#ransom-dc');
@@ -395,15 +385,6 @@ $$('[data-clock]').forEach(b => b.addEventListener('click', () => {
   state.clock = clamp(state.clock + Number(b.dataset.clock), 0, 6);
   save(); refreshStats();
   if (state.clock >= 6) flashTab('clock');
-}));
-
-/* ===========================================================
-   Heat buttons
-   =========================================================== */
-$$('[data-heat]').forEach(b => b.addEventListener('click', () => {
-  state.heat = clamp(state.heat + Number(b.dataset.heat), 0, 5);
-  syncBoundField('heat');
-  save(); refreshStats();
 }));
 
 function syncBoundField(key) {
@@ -429,8 +410,6 @@ document.addEventListener('click', e => {
     case 'genReward':      showQuickCard('Reward', generateReward()); break;
     case 'resetClock':     state.clock = 0; syncBoundField('clock'); save(); refreshStats(); break;
     case 'manualMinus':    state.clock = clamp(state.clock-1,0,6); syncBoundField('clock'); save(); refreshStats(); break;
-    case 'heatPlus':       state.heat = clamp(state.heat+1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
-    case 'heatMinus':      state.heat = clamp(state.heat-1,0,5); syncBoundField('heat'); save(); refreshStats(); break;
     case 'newRoute':       showNewRouteForm(true); break;
     case 'cancelNewRoute': showNewRouteForm(false); break;
     case 'createRoute':    createRouteFromForm(); break;

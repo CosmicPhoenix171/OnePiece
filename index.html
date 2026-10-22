@@ -51,7 +51,6 @@
     <span>Menu</span>
   </button>
   <div id="tabs-menu" class="tabs-menu-list">
-    <button class="tab" data-tab="bounty">Bounty</button>
     <button class="tab active" data-tab="map">Map</button>
     <button class="tab" data-tab="images">Shared Images</button>
     <button class="tab" data-tab="ship">Ship Tracker</button>
@@ -78,38 +77,6 @@
 </section>
 
 <main id="main">
-  <!-- BOUNTY -->
-  <section class="panel" id="tab-bounty">
-    <div class="parchment">
-      <h2>Bounty Tracker</h2>
-      <div class="clock-wrap">
-        <div class="clock-display"><span id="heat-val">0</span> / 5</div>
-        <div class="clock-bar heat"><div id="heat-fill"></div></div>
-        <div class="muted" id="heat-label-big">Unlisted</div>
-      </div>
-      <div class="btn-row">
-        <button data-heat="1">+1 Defeated Marines publicly</button>
-        <button data-heat="1">+1 Stole a ship or treasure</button>
-        <button data-heat="2">+2 Rescued a prisoner from execution</button>
-        <button data-heat="2">+2 Humiliated an important officer</button>
-        <button data-heat="1">+1 Claimed treasure in public</button>
-        <button data-heat="2">+2 Sank a Marine ship</button>
-      </div>
-      <div class="btn-row">
-        <button class="gold" data-action="heatPlus">+1 Bounty</button>
-        <button data-action="heatMinus">-1 Bounty (lay low)</button>
-      </div>
-      <div class="parchment inset">
-        <h3>Bounty Effects</h3>
-        <ul>
-          <li><b>Bounty 3+</b> — Enemies start preparing for the crew.</li>
-          <li><b>Bounty 4+</b> — Named bounty hunters and stronger Marine officers appear.</li>
-          <li><b>Bounty 5</b> — World Government / major Marine force actively involved.</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
   <!-- MAP -->
   <section class="panel active" id="tab-map">
     <div class="map-shell">
