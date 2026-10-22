@@ -99,11 +99,41 @@ function save() {
 
 let __applyingRemote = false;
 let __pendingSheetMigrationSync = false;
+const __pendingLogBooks = new Set();
+
+function logBookOwnerKey(username, notes = state.playerNotes) {
+  const requested = normalizeUsername(username);
+  const requestedKey = requested.toLowerCase();
+  const existing = Object.keys(notes || {})
+    .find((name) => normalizeUsername(name).toLowerCase() === requestedKey);
+  return existing || requested;
+}
+
+function saveLogBook(username) {
+  const owner = logBookOwnerKey(username);
+  if (!owner) return Promise.resolve(false);
+  const ownerKey = normalizeUsername(owner).toLowerCase();
+  __pendingLogBooks.add(ownerKey);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('Local save skipped; campaign data exceeds browser storage.', error);
+  }
+  if (typeof window.syncLogBook !== 'function') return Promise.resolve(false);
+  return window.syncLogBook(owner, state.playerNotes[owner], state.playerNoteDates[owner])
+    .then((saved) => {
+      if (saved) __pendingLogBooks.delete(ownerKey);
+      return saved;
+    });
+}
+
 function applyRemoteState(remote, options = {}) {
   if (!remote || typeof remote !== 'object') return;
   // Preserve viewer-local fields (pan/zoom, UI toggles) across remote updates
   // so other players' edits never hijack this viewer's map viewport.
   const localMapView = state.mapView;
+  const localPlayerNotes = state.playerNotes || {};
+  const localPlayerNoteDates = state.playerNoteDates || {};
   const incomingBroadcast = remote.sharedImageBroadcast;
   const shouldPresentBroadcast = !options.initial
     && !isGmUser()
@@ -114,6 +144,15 @@ function applyRemoteState(remote, options = {}) {
     Object.keys(state).forEach((k) => { delete state[k]; });
     Object.assign(state, structuredClone(DEFAULT_STATE), remote);
     if (localMapView) state.mapView = localMapView;
+    __pendingLogBooks.forEach((ownerKey) => {
+      const localOwner = Object.keys(localPlayerNotes).find((name) => normalizeUsername(name).toLowerCase() === ownerKey);
+      if (!localOwner) return;
+      const remoteOwner = logBookOwnerKey(localOwner, state.playerNotes);
+      state.playerNotes[remoteOwner] = localPlayerNotes[localOwner];
+      if (Array.isArray(localPlayerNoteDates[localOwner])) {
+        state.playerNoteDates[remoteOwner] = localPlayerNoteDates[localOwner];
+      }
+    });
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (error) {
@@ -283,12 +322,13 @@ const HEAT_LABELS   = { 0:"Unlisted", 1:"Local notice", 2:"Regional bounty", 3:"
 /* ===========================================================
    Tab navigation
    =========================================================== */
-$$('#tabs .tab').forEach(t => t.addEventListener('click', () => {
-  $$('#tabs .tab').forEach(x => x.classList.remove('active'));
-  $$('.panel').forEach(p => p.classList.remove('active'));
-  t.classList.add('active');
-  $('#tab-' + t.dataset.tab).classList.add('active');
-}));
+const tabsMenuToggle = $('#tabs-menu-toggle');
+tabsMenuToggle?.addEventListener('click', () => {
+  const isOpen = $('#tabs').classList.toggle('menu-open');
+  tabsMenuToggle.setAttribute('aria-expanded', String(isOpen));
+});
+$$('#tabs .tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
+$$('#tabs .tab').forEach((tab) => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
 
 /* ===========================================================
    Two-way binding for dashboard fields
@@ -438,6 +478,8 @@ function showTab(name) {
   $$('.panel').forEach(p => p.classList.remove('active'));
   tab.classList.add('active');
   panel.classList.add('active');
+  $('#tabs').classList.remove('menu-open');
+  tabsMenuToggle?.setAttribute('aria-expanded', 'false');
 }
 
 /* ===========================================================
@@ -2144,20 +2186,16 @@ function renderPlayerNotes(root) {
           aria-label="Log Book page ${pageIndex + 1}"
           placeholder="Set down the day’s course, discoveries, and promises…"
           ${pageIndex >= pages.length ? 'disabled' : (canEdit ? '' : 'readonly')}>${esc(pages[pageIndex] || '')}</textarea>
-        <span class="log-book-page-number">${pageIndex < pages.length ? pageIndex + 1 : ''}</span>
+        <div class="log-book-page-footer">
+          ${side === 0 ? `<button type="button" data-book-action="previous" aria-label="Previous pages" title="Previous pages" ${pageStart === 0 ? 'disabled' : ''}>←</button>` : ''}
+          <span class="log-book-page-number">${pageIndex < pages.length ? pageIndex + 1 : ''}</span>
+          ${side === 1 ? `<button type="button" data-book-action="next" aria-label="Next pages" title="Next pages" ${pageStart + pageStep >= pages.length ? 'disabled' : ''}>→</button>` : ''}
+          ${side === 0 ? `<button type="button" class="log-book-next-mobile" data-book-action="next" aria-label="Next pages" title="Next pages" ${pageStart + pageStep >= pages.length ? 'disabled' : ''}>→</button>` : ''}
+        </div>
       </section>`).join('');
 
     root.innerHTML = `
-      <div class="log-book-toolbar">
-        ${selectorHtml}
-        <div class="log-book-actions">
-          <button type="button" data-book-action="previous" aria-label="Previous pages" title="Previous pages" ${pageStart === 0 ? 'disabled' : ''}>←</button>
-          <span class="log-book-position">${pageStart + 1}${pageStep === 2 && pageStart + 1 < pages.length ? `–${Math.min(pageStart + 2, pages.length)}` : ''} of ${pages.length}</span>
-          <button type="button" data-book-action="next" aria-label="Next pages" title="Next pages" ${pageStart + pageStep >= pages.length ? 'disabled' : ''}>→</button>
-          ${canEdit ? '<button type="button" data-book-action="add" title="Add page">+ Page</button>' : ''}
-          ${canEdit ? `<button type="button" data-book-action="delete" class="danger" title="Delete current page" ${pages.length === 1 ? 'disabled' : ''}>Delete page</button>` : ''}
-        </div>
-      </div>
+      ${selectorHtml ? `<div class="log-book-toolbar">${selectorHtml}</div>` : ''}
       <div class="log-book" aria-label="Log Book">
         <div class="log-book-spread">${pageHtml}</div>
       </div>`;
@@ -2172,9 +2210,24 @@ function renderPlayerNotes(root) {
       textarea.addEventListener('input', () => {
         if (!isOwnLogBook(__notesViewing)) return;
         const nextPages = notesPages(state.playerNotes[__notesViewing]);
-        nextPages[Number(textarea.dataset.notesPage)] = textarea.value;
+        const pageIndex = Number(textarea.dataset.notesPage);
+        const isLastPage = pageIndex === nextPages.length - 1;
+        nextPages[pageIndex] = textarea.value;
+        if (isLastPage && textarea.value) {
+          nextPages.push('', '');
+          const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
+            ? [...state.playerNoteDates[__notesViewing]]
+            : [];
+          nextDates.push('', '');
+          state.playerNoteDates[__notesViewing] = nextDates;
+        }
         state.playerNotes[__notesViewing] = nextPages.join('\f');
-        save();
+        saveLogBook(__notesViewing);
+        if (isLastPage && textarea.value) {
+          root.dataset.notesSig = '';
+          renderPlayerNotes(root);
+          $(`[data-notes-page="${pageIndex}"]`, root)?.focus();
+        }
       });
     });
     $$('.log-book-page-date', root).forEach((dateInput) => {
@@ -2185,7 +2238,7 @@ function renderPlayerNotes(root) {
           : [];
         nextDates[Number(dateInput.dataset.notesDate)] = dateInput.value;
         state.playerNoteDates[__notesViewing] = nextDates;
-        save();
+        saveLogBook(__notesViewing);
       });
     });
 
@@ -2194,30 +2247,6 @@ function renderPlayerNotes(root) {
       const step = notesPagesPerView();
       if (action === 'previous') __notesPageByUser[__notesViewing] = Math.max(0, pageStart - step);
       if (action === 'next') __notesPageByUser[__notesViewing] = Math.min(pages.length - 1, pageStart + step);
-      if (action === 'add' && canEdit) {
-        const nextPages = notesPages(state.playerNotes[__notesViewing]);
-        nextPages.push('');
-        state.playerNotes[__notesViewing] = nextPages.join('\f');
-        const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
-          ? [...state.playerNoteDates[__notesViewing]]
-          : [];
-        nextDates.push('');
-        state.playerNoteDates[__notesViewing] = nextDates;
-        __notesPageByUser[__notesViewing] = nextPages.length - 1;
-        save();
-      }
-      if (action === 'delete' && canEdit && pages.length > 1) {
-        const nextPages = notesPages(state.playerNotes[__notesViewing]);
-        nextPages.splice(pageStart, 1);
-        state.playerNotes[__notesViewing] = nextPages.join('\f');
-        const nextDates = Array.isArray(state.playerNoteDates[__notesViewing])
-          ? [...state.playerNoteDates[__notesViewing]]
-          : [];
-        nextDates.splice(pageStart, 1);
-        state.playerNoteDates[__notesViewing] = nextDates;
-        __notesPageByUser[__notesViewing] = Math.min(pageStart, nextPages.length - 1);
-        save();
-      }
       root.dataset.notesSig = '';
       renderPlayerNotes(root);
       $('.notes-page-text', root)?.focus();
@@ -3645,9 +3674,9 @@ function deleteRoute(id) {
 }
 
 function renderTravel() {
-  if (typeof renderMapRoute === 'function') renderMapRoute();
-  // Active route
   const root = $('#travel-active');
+  if (!root) return;
+  // Active route
   const r = activeRoute();
   if (!r) {
     root.innerHTML = '<p class="muted">No active sea route. Create one to begin tracking.</p>';
@@ -3838,12 +3867,127 @@ function bindShipFields() {
   }));
 }
 
+let fireEffectCanvas = null;
+let fireEffectAnimId = 0;
+let fireEffectDamage = 0;
+
+function ensureFireEffectCanvas(overlay) {
+  if (fireEffectCanvas) return fireEffectCanvas;
+  fireEffectCanvas = document.createElement('canvas');
+  fireEffectCanvas.className = 'fire-damage-canvas';
+  fireEffectCanvas.setAttribute('aria-hidden', 'true');
+  overlay.appendChild(fireEffectCanvas);
+  window.addEventListener('resize', resizeFireEffectCanvas);
+  return fireEffectCanvas;
+}
+
+function resizeFireEffectCanvas() {
+  if (!fireEffectCanvas) return;
+  const pr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  fireEffectCanvas.width  = Math.round(w * pr);
+  fireEffectCanvas.height = Math.round(h * pr);
+  fireEffectCanvas.style.width  = `${w}px`;
+  fireEffectCanvas.style.height = `${h}px`;
+  fireEffectCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0);
+}
+
+/* Layered sin waves produce a continuous pseudo-random flame height, 0..~1 */
+function _fht(p, t, ph) {
+  return Math.max(0,
+    Math.sin(p * 0.055 + t * 2.8  + ph)       * 0.38 +
+    Math.sin(p * 0.120 - t * 4.1  + ph * 1.7) * 0.29 +
+    Math.sin(p * 0.230 + t * 5.9  + ph * 0.6) * 0.18 +
+    Math.sin(p * 0.380 - t * 2.3  + ph * 2.4) * 0.10 +
+    Math.sin(p * 0.610 + t * 7.4  + ph * 1.2) * 0.05
+  ) * 1.15;
+}
+
+/* Draw one pass of triangular flame tongues along one screen edge.
+   edge: 0=bottom, 1=top, 2=left, 3=right */
+function _edgePass(ctx, W, H, t, edge, maxH, colW, ph, a, r0,g0,b0, r1,g1,b1, r2,g2,b2) {
+  const len = edge < 2 ? W : H;
+  const hw  = colW * 0.72;
+  for (let p = 0; p < len; p += colW) {
+    const h = maxH * _fht(p, t, ph);
+    if (h < 1.5) continue;
+    let grd;
+    ctx.beginPath();
+    if (edge === 0) {
+      grd = ctx.createLinearGradient(p, H, p, H - h);
+      ctx.moveTo(p - hw, H);  ctx.lineTo(p + hw, H);  ctx.lineTo(p, H - h);
+    } else if (edge === 1) {
+      grd = ctx.createLinearGradient(p, 0, p, h);
+      ctx.moveTo(p - hw, 0);  ctx.lineTo(p + hw, 0);  ctx.lineTo(p, h);
+    } else if (edge === 2) {
+      grd = ctx.createLinearGradient(0, p, h, p);
+      ctx.moveTo(0, p - hw);  ctx.lineTo(0, p + hw);  ctx.lineTo(h, p);
+    } else {
+      grd = ctx.createLinearGradient(W, p, W - h, p);
+      ctx.moveTo(W, p - hw);  ctx.lineTo(W, p + hw);  ctx.lineTo(W - h, p);
+    }
+    ctx.closePath();
+    grd.addColorStop(0,    `rgba(${r0},${g0},${b0},${a})`);
+    grd.addColorStop(0.38, `rgba(${r1},${g1},${b1},${(a * 0.82).toFixed(3)})`);
+    grd.addColorStop(0.72, `rgba(${r2},${g2},${b2},${(a * 0.42).toFixed(3)})`);
+    grd.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.fillStyle = grd;
+    ctx.fill();
+  }
+}
+
+function drawFireEffect(ts) {
+  if (!fireEffectCanvas || !fireEffectDamage) { fireEffectAnimId = 0; return; }
+  const ctx = fireEffectCanvas.getContext('2d');
+  const W = window.innerWidth, H = window.innerHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  const t = ts * 0.001;
+  const d = fireEffectDamage / 100;
+  const mH = 24 + d * 86; // flame height scales with damage
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (let edge = 0; edge < 4; edge++) {
+    const ph = edge * 2.31;
+    // dark smoke/ember base — tallest, lowest alpha
+    _edgePass(ctx, W, H, t,       edge, mH * 1.9, 12, ph,       d * 0.48, 190,38,6,  120,18,4,  70,8,2);
+    // orange flame body — medium
+    _edgePass(ctx, W, H, t,       edge, mH * 1.1,  8, ph + 1.1, d * 0.70, 255,140,20, 255,65,8,  200,25,5);
+    // white-hot core — shortest, brightest
+    _edgePass(ctx, W, H, t + 0.5, edge, mH * 0.58, 5, ph + 2.2, d * 0.88, 255,255,200, 255,220,80, 255,110,18);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    fireEffectAnimId = requestAnimationFrame(drawFireEffect);
+  } else {
+    fireEffectAnimId = 0;
+  }
+}
+
+function updateFireDamageEffect(damage) {
+  const overlay = $('#fire-damage-overlay');
+  if (!overlay) return;
+  fireEffectDamage = damage;
+  overlay.classList.toggle('active', damage > 0);
+  overlay.style.opacity = damage > 0 ? '1' : '0';
+  if (!damage) {
+    if (fireEffectAnimId) cancelAnimationFrame(fireEffectAnimId);
+    fireEffectAnimId = 0;
+    return;
+  }
+  ensureFireEffectCanvas(overlay);
+  resizeFireEffectCanvas();
+  if (!fireEffectAnimId) fireEffectAnimId = requestAnimationFrame(drawFireEffect);
+}
+
 function renderShip() {
   const s = state.ship;
   if (!Array.isArray(s.crew)) s.crew = [];
   if (!Array.isArray(s.log)) s.log = [];
   s.fireDamage = clamp(Number(s.fireDamage) || 0, 0, 100);
   s.waterDamage = clamp(Number(s.waterDamage) || 0, 0, 100);
+  updateFireDamageEffect(s.fireDamage);
   const waterOverlay = $('#water-damage-overlay');
   if (waterOverlay) {
     waterOverlay.style.height = `${s.waterDamage}vh`;
