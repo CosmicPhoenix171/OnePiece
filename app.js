@@ -56,6 +56,7 @@ const DEFAULT_STATE = {
     log: []
   },
   playerSheets: [],
+  combatTurn: { round: 0, activeId: null, started: false },
   playerNotes: {},
   playerNoteDates: {},
   rollLog: [],
@@ -97,6 +98,7 @@ function save() {
 }
 
 let __applyingRemote = false;
+let __pendingSheetMigrationSync = false;
 function applyRemoteState(remote, options = {}) {
   if (!remote || typeof remote !== 'object') return;
   // Preserve viewer-local fields (pan/zoom, UI toggles) across remote updates
@@ -122,19 +124,23 @@ function applyRemoteState(remote, options = {}) {
   } finally {
     __applyingRemote = false;
   }
+  if (__pendingSheetMigrationSync) {
+    __pendingSheetMigrationSync = false;
+    save();
+  }
 }
 function rerenderAll() {
+  try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
   try { if (typeof refreshStats === 'function') refreshStats(); } catch (e) { console.error(e); }
   try { if (typeof renderNpcEncounter === 'function') renderNpcEncounter(); } catch (e) { console.error(e); }
   try { if (typeof renderNpcCards === 'function') renderNpcCards(); } catch (e) { console.error(e); }
+  try { if (typeof renderCombatEncounter === 'function') renderCombatEncounter(); } catch (e) { console.error(e); }
   try { if (typeof renderRollLog === 'function') renderRollLog(); } catch (e) { console.error(e); }
   try { if (typeof renderLog === 'function') renderLog(); } catch (e) { console.error(e); }
-  try { if (typeof renderPlayerSheets === 'function') renderPlayerSheets(); } catch (e) { console.error(e); }
   try { if (typeof renderTravel === 'function') renderTravel(); } catch (e) { console.error(e); }
   try { if (typeof renderShip === 'function') renderShip(); } catch (e) { console.error(e); }
   try { if (typeof renderMap === 'function') renderMap(); } catch (e) { console.error(e); }
   try { if (typeof renderSharedImages === 'function') renderSharedImages(); } catch (e) { console.error(e); }
-  try { if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields(); } catch (e) { console.error(e); }
   $$('[data-bind]').forEach((el) => {
     const key = el.dataset.bind;
     if (state[key] !== undefined && document.activeElement !== el) el.value = state[key];
@@ -282,9 +288,6 @@ $$('#tabs .tab').forEach(t => t.addEventListener('click', () => {
   $$('.panel').forEach(p => p.classList.remove('active'));
   t.classList.add('active');
   $('#tab-' + t.dataset.tab).classList.add('active');
-  if (t.dataset.tab === 'characters') {
-    requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
-  }
 }));
 
 /* ===========================================================
@@ -435,9 +438,6 @@ function showTab(name) {
   $$('.panel').forEach(p => p.classList.remove('active'));
   tab.classList.add('active');
   panel.classList.add('active');
-  if (name === 'characters') {
-    requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
-  }
 }
 
 /* ===========================================================
@@ -757,6 +757,7 @@ function addNpcToEncounter(templateName) {
     name: matching ? `${npc.name} ${matching + 1}` : npc.name,
     tier: npc.tier,
     ac: npc.ac,
+    initiative: 0,
     maxHp: npc.hp,
     hp: npc.hp
   });
@@ -774,6 +775,9 @@ function npcEncounterCardHtml(combatant) {
       <span>${esc(combatant.tier)} · AC ${Number(combatant.ac) || 0}</span>
       <button type="button" class="danger" data-remove-combatant title="Remove from encounter" aria-label="Remove ${esc(combatant.name)}">×</button>
     </div>
+    <label class="npc-initiative-control">Initiative
+      <input type="number" data-combatant-initiative value="${Number(combatant.initiative) || 0}" aria-label="Initiative for ${esc(combatant.name)}" />
+    </label>
     <div class="npc-hp-summary"><strong>${hp} / ${maxHp} HP</strong><span>${hp === 0 ? 'Defeated' : `${Math.round(percent)}%`}</span></div>
     <div class="npc-hp-bar"><div style="width:${percent}%"></div></div>
     <div class="npc-hp-controls">
@@ -799,6 +803,7 @@ function renderNpcEncounter() {
   if (count) count.textContent = `${state.npcEncounter.length} combatant${state.npcEncounter.length === 1 ? '' : 's'}`;
   const clear = $('#npc-clear-encounter');
   if (clear) clear.hidden = !state.npcEncounter.length;
+  renderCombatEncounter();
 }
 
 function renderNpcCards() {
@@ -849,6 +854,9 @@ function initNpcTab() {
     if (event.target.matches('[data-combatant-name]')) {
       combatant.name = String(event.target.value || combatant.templateName).trim().slice(0, 50) || combatant.templateName;
     }
+    if (event.target.matches('[data-combatant-initiative]')) {
+      combatant.initiative = Number(event.target.value) || 0;
+    }
     save();
     renderNpcEncounter();
   });
@@ -860,6 +868,383 @@ function initNpcTab() {
   });
   renderNpcEncounter();
   renderNpcCards();
+}
+
+function combatantList() {
+  const players = (Array.isArray(state.playerSheets) ? state.playerSheets : []).map((sheet, index) => {
+    const maxHp = Math.max(1, Number(sheet.maxHp) || 1);
+    return {
+      id: `player:${sheet.id}`,
+      type: 'player',
+      name: String(sheet.name || sheet.player || 'Character'),
+      owner: String(sheet.player || ''),
+      canRollInitiative: isSheetOwner(sheet),
+      canAdjustHp: canEditSheet(sheet),
+      canOpenSheet: canEditSheet(sheet),
+      enabled: sheet.combatEnabled !== false,
+      ac: calculateArmorClass(sheet),
+      initiative: Number(sheet.initiative) || 0,
+      hp: clamp(Number(sheet.hp) || 0, 0, maxHp),
+      maxHp,
+      portrait: sheet.portrait || '',
+      order: index,
+    };
+  });
+  const npcOffset = players.length;
+  const npcs = (Array.isArray(state.npcEncounter) ? state.npcEncounter : []).map((combatant, index) => {
+    const maxHp = Math.max(1, Number(combatant.maxHp) || 1);
+    return {
+      id: `npc:${combatant.id}`,
+      type: 'npc',
+      name: String(combatant.name || combatant.templateName || 'NPC'),
+      owner: String(combatant.tier || 'NPC'),
+      canRollInitiative: false,
+      canAdjustHp: isGmUser(),
+      enabled: true,
+      ac: Number(combatant.ac) || 0,
+      initiative: Number(combatant.initiative) || 0,
+      hp: clamp(Number(combatant.hp) || 0, 0, maxHp),
+      maxHp,
+      portrait: '',
+      order: npcOffset + index,
+    };
+  });
+  return [...players, ...npcs].sort((a, b) => b.initiative - a.initiative || a.order - b.order);
+}
+
+function getCombatTurn() {
+  if (!state.combatTurn || typeof state.combatTurn !== 'object') {
+    state.combatTurn = { round: 0, activeId: null, started: false };
+  }
+  state.combatTurn.round = Math.max(0, Math.floor(Number(state.combatTurn.round) || 0));
+  state.combatTurn.activeId = typeof state.combatTurn.activeId === 'string' ? state.combatTurn.activeId : null;
+  state.combatTurn.started = Boolean(state.combatTurn.started);
+  return state.combatTurn;
+}
+
+function combatantCardHtml(combatant, turn) {
+  const percent = clamp((combatant.hp / combatant.maxHp) * 100, 0, 100);
+  const isActive = turn.started && turn.activeId === combatant.id && combatant.hp > 0 && combatant.enabled;
+  const defeated = combatant.hp <= 0;
+  const sidelined = combatant.type === 'player' && !combatant.enabled;
+  const initiative = combatant.canRollInitiative
+    ? `<button type="button" class="combatant-initiative combatant-initiative-roll" data-roll-initiative="${esc(combatant.id)}" aria-label="Roll initiative for ${esc(combatant.name)}" title="Roll d20 + Dexterity modifier"><span>INIT</span><b>${combatant.initiative}</b></button>`
+    : `<span class="combatant-initiative"><span>INIT</span><b>${combatant.initiative}</b></span>`;
+  const avatar = combatant.portrait
+    ? `<img src="${esc(combatant.portrait)}" alt="" />`
+    : `<span class="combatant-card-token" aria-hidden="true">${combatant.type === 'player' ? '⚓' : '☠'}</span>`;
+  const portrait = combatant.type === 'player' && combatant.canOpenSheet
+    ? `<button type="button" class="combatant-portrait-button" data-open-player-sheet="${esc(combatant.id)}" aria-label="Open ${esc(combatant.name)}'s character sheet" title="Open character sheet">${avatar}</button>`
+    : avatar;
+  return `<article class="combatant-card ${combatant.type === 'player' ? 'crew-combatant' : 'opponent-combatant'}${isActive ? ' active-turn' : ''}${defeated ? ' defeated' : ''}${sidelined ? ' not-in-encounter' : ''}" data-combatant-id="${esc(combatant.id)}">
+    ${isActive ? '<div class="combatant-turn-banner">⚔ CURRENT TURN ⚔</div>' : ''}
+    <div class="combatant-card-heading">
+      ${portrait}
+      <div class="combatant-card-title">
+        <span class="combatant-type">${combatant.type === 'player' ? 'Crew' : 'Opponent'}</span>
+        <h3>${esc(combatant.name)}</h3>
+        <span class="combatant-owner">${esc(combatant.owner)}</span>
+      </div>
+      ${initiative}
+    </div>
+    ${combatant.type === 'player' && isGmUser()
+      ? `<button type="button" class="combatant-participation${sidelined ? ' sidelined' : ''}" data-toggle-crew="${esc(combatant.id)}" aria-label="${sidelined ? 'Add' : 'Remove'} ${esc(combatant.name)} ${sidelined ? 'to' : 'from'} encounter">${sidelined ? 'Add to Encounter' : 'Remove from Encounter'}</button>`
+      : ''}
+    <div class="combatant-vitals">
+      <span><small>HP</small><b>${combatant.hp} / ${combatant.maxHp}</b></span>
+      <span><small>AC</small><b>${combatant.ac}</b></span>
+      <strong class="combatant-status">${defeated ? 'Defeated' : sidelined ? 'Sidelined' : isActive ? 'Current Turn' : 'Ready'}</strong>
+    </div>
+    ${combatant.canAdjustHp ? `<div class="combatant-quick-hp">
+      <label>Quick HP
+        <input type="number" min="1" step="1" value="1" data-combat-hp-amount required aria-label="HP adjustment amount for ${esc(combatant.name)}" />
+      </label>
+      <button type="button" data-combat-hp-action="damage" aria-label="Apply damage to ${esc(combatant.name)}">− Damage</button>
+      <button type="button" data-combat-hp-action="heal" aria-label="Heal ${esc(combatant.name)}">+ Heal</button>
+    </div>` : ''}
+    <div class="combatant-hp-bar"><div style="width:${percent}%"></div></div>
+  </article>`;
+}
+
+function renderCombatEncounter() {
+  const root = $('#combat-roster');
+  if (!root) {
+    renderCombatSheet();
+    return;
+  }
+  if (!currentUsername) {
+    root.innerHTML = '<p class="combat-empty">Log in to view the active encounter.</p>';
+    renderCombatSheet();
+    return;
+  }
+  const combatants = combatantList();
+  const turn = getCombatTurn();
+  const participating = combatants.filter((combatant) => combatant.enabled);
+  const living = participating.filter((combatant) => combatant.hp > 0);
+  const active = combatants.find((combatant) => combatant.id === turn.activeId && combatant.hp > 0 && combatant.enabled);
+  const roundLabel = $('#combat-round');
+  const activeLabel = $('#combat-active-label');
+  const countLabel = $('#combat-combatant-count');
+  if (roundLabel) roundLabel.textContent = turn.started ? `Round ${turn.round}` : 'Combat not started';
+  if (activeLabel) {
+    activeLabel.textContent = turn.started
+      ? active ? `Up now: ${active.name}` : 'No active turn — advance to continue.'
+      : 'Set initiative and start the encounter.';
+  }
+  if (countLabel) {
+    const disabledCount = combatants.length - participating.length;
+    countLabel.textContent = disabledCount
+      ? `${participating.length} included · ${disabledCount} sidelined`
+      : `${combatants.length} combatant${combatants.length === 1 ? '' : 's'}`;
+  }
+  const nextButton = $('#combat-next');
+  const startButton = $('#combat-start');
+  const endButton = $('#combat-end');
+  if (startButton) startButton.disabled = !living.length;
+  if (nextButton) nextButton.disabled = !turn.started || !living.length;
+  if (endButton) endButton.disabled = !turn.started;
+  if (!combatants.length) {
+    root.innerHTML = '<p class="combat-empty">No combatants yet. The GM can add NPCs from the NPCs tab.</p>';
+    renderCombatSheet();
+    return;
+  }
+  const enemies = combatants.filter((combatant) => combatant.type === 'npc');
+  const crew = combatants.filter((combatant) => combatant.type === 'player');
+  const cards = (side) => side.length
+    ? side.map((combatant) => combatantCardHtml(combatant, turn)).join('')
+    : '<p class="combat-side-empty">No combatants in this line.</p>';
+  root.innerHTML = `
+    <section class="combat-mat-side enemy-side" aria-label="Enemy side">
+      <div class="combat-side-heading"><h3>Enemies</h3><span>${enemies.length}</span></div>
+      <div class="combatant-row">${cards(enemies)}</div>
+    </section>
+    <div class="combat-mat-divider" role="separator" aria-label="Divider between enemies and crew"><span>⚔ VS ⚔</span></div>
+    <section class="combat-mat-side crew-side" aria-label="Crew side">
+      <div class="combat-side-heading"><h3>Crew</h3><span>${crew.length}</span></div>
+      <div class="combatant-row">${cards(crew)}</div>
+    </section>`;
+  renderCombatSheet();
+}
+
+function startCombat() {
+  if (!isGmUser()) return;
+  const first = combatantList().find((combatant) => combatant.enabled && combatant.hp > 0);
+  if (!first) return;
+  state.combatTurn = { round: 1, activeId: first.id, started: true };
+  save();
+  renderCombatEncounter();
+}
+
+function advanceCombatTurn() {
+  if (!isGmUser()) return;
+  const combatants = combatantList();
+  const living = combatants.filter((combatant) => combatant.enabled && combatant.hp > 0);
+  const turn = getCombatTurn();
+  if (!living.length) {
+    state.combatTurn = { round: 0, activeId: null, started: false };
+    save();
+    renderCombatEncounter();
+    return;
+  }
+
+  const currentIndex = combatants.findIndex((combatant) => combatant.id === turn.activeId);
+  if (currentIndex < 0) {
+    turn.activeId = living[0].id;
+    turn.round = Math.max(1, turn.round);
+  } else {
+    for (let offset = 1; offset <= combatants.length; offset++) {
+      const nextIndex = (currentIndex + offset) % combatants.length;
+      const next = combatants[nextIndex];
+      if (!next.enabled || next.hp <= 0) continue;
+      if (nextIndex <= currentIndex) turn.round = Math.max(1, turn.round) + 1;
+      turn.activeId = next.id;
+      break;
+    }
+  }
+  turn.started = true;
+  save();
+  renderCombatEncounter();
+}
+
+function endCombat() {
+  if (!isGmUser()) return;
+  state.combatTurn = { round: 0, activeId: null, started: false };
+  save();
+  renderCombatEncounter();
+}
+
+let activeCombatSheetId = null;
+
+function renderCombatSheet() {
+  const panel = $('#combat-sheet-panel');
+  const root = $('#combat-sheet-view');
+  if (!panel || !root) return;
+  if (!activeCombatSheetId) {
+    panel.hidden = true;
+    root.innerHTML = '';
+    delete root.dataset.sheetId;
+    delete root.dataset.sheetLayout;
+    return;
+  }
+
+  const sheetIndex = state.playerSheets.findIndex((entry) => entry?.id === activeCombatSheetId);
+  const sheet = state.playerSheets[sheetIndex];
+  if (!sheet || !canEditSheet(sheet)) {
+    activeCombatSheetId = null;
+    panel.hidden = true;
+    root.innerHTML = '';
+    delete root.dataset.sheetId;
+    delete root.dataset.sheetLayout;
+    return;
+  }
+
+  panel.hidden = false;
+  const layout = [
+    sheet.id,
+    sheet.player,
+    currentUsername,
+    canEditSheet(sheet),
+    unlockedAbilitySheetIds.has(sheet.id),
+    sheet.portrait?.length || 0,
+    Array.isArray(sheet.inventory) ? sheet.inventory.length : 0,
+    Array.isArray(sheet.moves) ? sheet.moves.length : 0
+  ].join('|');
+  let card = root.querySelector('.player-card');
+  if (root.dataset.sheetId !== sheet.id || root.dataset.sheetLayout !== layout || !card) {
+    root.innerHTML = renderSheetHtml(sheet, sheetIndex);
+    root.querySelectorAll('.sheet-reference-grid').forEach((references) => references.remove());
+    card = root.querySelector('.player-card');
+    if (!card) {
+      console.error('Combat character sheet failed to render.');
+      activeCombatSheetId = null;
+      panel.hidden = true;
+      return;
+    }
+    root.dataset.sheetId = sheet.id;
+    root.dataset.sheetLayout = layout;
+    attachSheetHandlers(card, sheet, sheetIndex);
+  } else {
+    refreshDigitalSheetValues(card, sheet);
+    const title = card.querySelector('.digital-sheet-header h2');
+    if (title) title.textContent = sheet.name || 'New Character';
+    const subtitle = card.querySelector('.digital-sheet-subtitle');
+    if (subtitle) subtitle.textContent = [sheet.epithet, sheet.role].filter(Boolean).join(' · ') || 'Crew character sheet';
+    const meta = card.querySelector('.updated-meta');
+    if (meta) meta.textContent = sheetMetaText(sheet);
+  }
+  const heading = $('#combat-sheet-panel-title');
+  if (heading) heading.textContent = `${sheet.name || 'Character'} — Player Sheet`;
+}
+
+function openPlayerSheetFromCombat(combatantId) {
+  if (!String(combatantId).startsWith('player:')) return;
+  const sheetId = String(combatantId).slice('player:'.length);
+  const sheet = state.playerSheets.find((entry) => entry?.id === sheetId);
+  const panel = $('#combat-sheet-panel');
+  if (!sheet || !canEditSheet(sheet) || !panel) return;
+  activeCombatSheetId = sheetId;
+  renderCombatSheet();
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function rollCharacterInitiative(combatantId) {
+  if (!String(combatantId).startsWith('player:')) return;
+  const sheetId = String(combatantId).slice('player:'.length);
+  const sheet = state.playerSheets.find((entry) => entry?.id === sheetId);
+  if (!sheet || !isSheetOwner(sheet)) return;
+
+  const die = roll(20);
+  const modifier = statMod(sheet.stats?.dex);
+  const total = die + modifier;
+  const detail = `${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} DEX = ${total}`;
+  sheet.initiative = total;
+  stampSheetEdit(sheet);
+  recordRoll({
+    character: sheet.name || sheet.player,
+    label: 'Initiative',
+    sides: 20,
+    die,
+    rolls: [die],
+    modifier,
+    total,
+    detail
+  });
+  renderPlayerSheets();
+  showDiceRoll({ sides: 20, die, rolls: [die], modifier, total, label: 'Initiative', rollDetail: detail });
+}
+
+function adjustCombatCardHp(combatantId, action, amountInput) {
+  const amount = readQuickHpAmount(amountInput);
+  if (amount === null) return;
+  const direction = action === 'damage' ? -1 : action === 'heal' ? 1 : 0;
+  if (!direction) return;
+
+  if (String(combatantId).startsWith('player:')) {
+    const sheetId = String(combatantId).slice('player:'.length);
+    const sheet = state.playerSheets.find((entry) => entry?.id === sheetId);
+    if (!sheet || !canEditSheet(sheet)) return;
+    const result = applyQuickHpAdjustment(sheet, amount, direction, calculateArmorClass(sheet));
+    stampSheetEdit(sheet);
+    save();
+    renderPlayerSheets();
+    showHpChangeToast(result.message, result.changeType);
+    return;
+  }
+
+  if (String(combatantId).startsWith('npc:')) {
+    if (!isGmUser() || !Array.isArray(state.npcEncounter)) return;
+    const npcId = String(combatantId).slice('npc:'.length);
+    const combatant = state.npcEncounter.find((entry) => entry?.id === npcId);
+    if (!combatant) return;
+    const result = applyQuickHpAdjustment(combatant, amount, direction, Number(combatant.ac) || 0);
+    save();
+    renderNpcEncounter();
+    showHpChangeToast(result.message, result.changeType);
+  }
+}
+
+function toggleCrewParticipation(combatantId) {
+  if (!isGmUser() || !String(combatantId).startsWith('player:')) return;
+  const sheetId = String(combatantId).slice('player:'.length);
+  const sheet = state.playerSheets.find((entry) => entry?.id === sheetId);
+  if (!sheet) return;
+  sheet.combatEnabled = sheet.combatEnabled === false;
+  save();
+  renderCombatEncounter();
+}
+
+function initCombatTracker() {
+  $('#combat-start')?.addEventListener('click', startCombat);
+  $('#combat-next')?.addEventListener('click', advanceCombatTurn);
+  $('#combat-end')?.addEventListener('click', endCombat);
+  $('#combat-sheet-close')?.addEventListener('click', () => {
+    activeCombatSheetId = null;
+    renderCombatSheet();
+  });
+  $('#combat-roster')?.addEventListener('click', (event) => {
+    const sheetButton = event.target.closest('[data-open-player-sheet]');
+    if (sheetButton) {
+      openPlayerSheetFromCombat(sheetButton.dataset.openPlayerSheet);
+      return;
+    }
+    const rollButton = event.target.closest('[data-roll-initiative]');
+    if (rollButton) {
+      rollCharacterInitiative(rollButton.dataset.rollInitiative);
+      return;
+    }
+    const toggleButton = event.target.closest('[data-toggle-crew]');
+    if (toggleButton) {
+      toggleCrewParticipation(toggleButton.dataset.toggleCrew);
+      return;
+    }
+    const hpButton = event.target.closest('[data-combat-hp-action]');
+    if (hpButton) {
+      const card = hpButton.closest('[data-combatant-id]');
+      adjustCombatCardHp(card?.dataset.combatantId, hpButton.dataset.combatHpAction,
+        card?.querySelector('[data-combat-hp-amount]'));
+    }
+  });
+  renderCombatEncounter();
 }
 
 let diceFaceTimer = null;
@@ -1942,6 +2327,26 @@ const STAT_DEFS = [
   { key: 'wis', label: 'Wisdom' },
   { key: 'cha', label: 'Charisma' },
 ];
+const SKILL_DEFS = [
+  { key: 'acrobatics', label: 'Acrobatics', ability: 'dex' },
+  { key: 'animal_handling', label: 'Animal Handling', ability: 'wis' },
+  { key: 'devil_fruit_lore', label: 'Devil Fruit Lore', ability: 'int' },
+  { key: 'athletics', label: 'Athletics', ability: 'str' },
+  { key: 'deception', label: 'Deception', ability: 'cha' },
+  { key: 'history', label: 'History', ability: 'int' },
+  { key: 'insight', label: 'Insight', ability: 'wis' },
+  { key: 'intimidation', label: 'Intimidation', ability: 'cha' },
+  { key: 'investigation', label: 'Investigation', ability: 'int' },
+  { key: 'medicine', label: 'Medicine', ability: 'wis' },
+  { key: 'navigation', label: 'Navigation', ability: 'int' },
+  { key: 'perception', label: 'Perception', ability: 'wis' },
+  { key: 'performance', label: 'Performance', ability: 'cha' },
+  { key: 'persuasion', label: 'Persuasion', ability: 'cha' },
+  { key: 'shipwright', label: 'Shipwright', ability: 'int' },
+  { key: 'sleight_of_hand', label: 'Sleight of Hand', ability: 'dex' },
+  { key: 'stealth', label: 'Stealth', ability: 'dex' },
+  { key: 'survival', label: 'Survival', ability: 'wis' },
+];
 const PDF_FIELD_RENAMES = {
   home_sea_island_extra: 'home_sea_island_notes',
   portrait_or_character_art_note: 'portrait_or_description',
@@ -1954,83 +2359,22 @@ const PDF_FIELD_RENAMES = {
   signature_move_4_description: 'signature_move_4_what_it_does',
   devils_ransom_piece_casted: 'devils_ransom_piece_cursed',
 };
-const PDF_ABILITY_MOD_FIELDS = {
-  strength_score: 'strength_mod',
-  dexterity_score: 'dexterity_mod',
-  constitution_score: 'constitution_mod',
-  intelligence_score: 'intelligence_mod',
-  wisdom_score: 'wisdom_mod',
-  charisma_score: 'charisma_mod',
-};
-const PDF_SKILL_ABILITIES = {
-  acrobatics: 'dexterity',
-  animal_handling: 'wisdom',
-  devil_fruit_lore: 'intelligence',
-  athletics: 'strength',
-  deception: 'charisma',
-  history: 'intelligence',
-  insight: 'wisdom',
-  intimidation: 'charisma',
-  investigation: 'intelligence',
-  medicine: 'wisdom',
-  navigation: 'intelligence',
-  perception: 'wisdom',
-  performance: 'charisma',
-  persuasion: 'charisma',
-  shipwright: 'intelligence',
-  sleight_of_hand: 'dexterity',
-  stealth: 'dexterity',
-  survival: 'wisdom',
-};
-
 function statMod(score) {
   const n = Number(score);
   if (!Number.isFinite(n)) return 0;
   return Math.floor((n - 10) / 2);
 }
+function calculateArmorClass(sheet) {
+  const stats = sheet?.stats || {};
+  const armorBaseAc = Number(sheet?.armorBaseAc);
+  const dexterity = Number(stats.dex);
+  const constitution = Number(stats.con);
+  const base = Number.isFinite(armorBaseAc) ? Math.max(0, armorBaseAc) : 10;
+  const dexScore = Number.isFinite(dexterity) ? dexterity : 10;
+  const conScore = Number.isFinite(constitution) ? constitution : 10;
+  return base + Math.max(dexScore, conScore);
+}
 function fmtMod(m) { return (m >= 0 ? `+${m}` : `${m}`); }
-function maximumHpFromConstitution(score) {
-  const modifier = statMod(score);
-  return modifier > 0 ? 100 + (modifier * 100) : 100 + (modifier * 10);
-}
-function updatePdfAbilityModifier(fields, scoreField) {
-  const modifierField = PDF_ABILITY_MOD_FIELDS[scoreField];
-  if (!modifierField) return false;
-  const rawScore = fields[scoreField];
-  const score = Number(rawScore);
-  if (rawScore === '' || !Number.isInteger(score) || score < 1 || score > 30) {
-    delete fields[modifierField];
-  } else {
-    const modifier = statMod(score);
-    fields[modifierField] = fmtMod(modifier);
-    if (scoreField === 'constitution_score') fields.max_hp = String(maximumHpFromConstitution(score));
-  }
-  if (scoreField === 'constitution_score' && !fields[modifierField]) delete fields.max_hp;
-  return true;
-}
-function updatePdfSkillModifiers(fields, changedField) {
-  const isAbilityScore = Object.hasOwn(PDF_ABILITY_MOD_FIELDS, changedField);
-  const isProficiency = /^skill_.+_proficient$/.test(changedField || '');
-  if (changedField && !isAbilityScore && !isProficiency) return false;
-
-  Object.entries(PDF_SKILL_ABILITIES).forEach(([skill, ability]) => {
-    const score = Number(fields[`${ability}_score`]);
-    const modifierField = `skill_${skill}_modifier`;
-    if (!Number.isInteger(score) || score < 1 || score > 30) {
-      delete fields[modifierField];
-      return;
-    }
-    const proficient = Boolean(fields[`skill_${skill}_proficient`]);
-    fields[modifierField] = fmtMod(statMod(score) + (proficient ? 5 : 0));
-  });
-  const perceptionModifier = Number(fields.skill_perception_modifier);
-  if (Number.isFinite(perceptionModifier)) {
-    fields.passive_perception = String(10 + perceptionModifier);
-  } else {
-    delete fields.passive_perception;
-  }
-  return true;
-}
 function sectionHp(maxHp) { return Math.max(1, Math.ceil((Number(maxHp) || 6) / 6)); }
 
 function makeEmptyBodyPart() {
@@ -2051,14 +2395,17 @@ function makeEmptySheet() {
     role: '',
     age: '',
     home: '',
+    homeNotes: '',
+    portraitDescription: '',
     portrait: '',
-    portraitHidden: false,
     // Inventory
     inventory: [],
     // Stats
     stats,
-    ac: 10,
+    armorBaseAc: 10,
+    ac: calculateArmorClass({ stats, armorBaseAc: 10 }),
     initiative: 0,
+    combatEnabled: true,
     speed: 30,
     // Combat / class
     level: 1,
@@ -2082,6 +2429,7 @@ function makeEmptySheet() {
     ransom: { piece: '', curseName: '', curseDC: 10 },
     // Bounty
     bounty: 0,
+    berries: 0,
     // Cinematic Health Tracker
     deathSaves: { success: [false, false, false], fail: [false, false, false] },
     body,
@@ -2089,8 +2437,8 @@ function makeEmptySheet() {
     // (legacy) Devil Fruit + notes
     devilFruit: '',
     notes: '',
-    // Live PDF form values: { field_name: value } matching the AcroForm field
-    // names in assets/Wanted_Character_Sheet_Form_Fillable (4).pdf.
+    skillProficiencies: {},
+    // Retained to migrate older PDF-only character data.
     pdfFields: {},
     updatedBy: currentUsername,
     updatedAt: new Date().toISOString(),
@@ -2100,19 +2448,22 @@ function makeEmptySheet() {
 /* Fill missing fields on old sheets so the new UI renders safely. */
 function normalizeSheet(pc) {
   if (!pc || typeof pc !== 'object') return makeEmptySheet();
+  const sheetVersion = Number(pc.digitalSheetVersion) || 0;
   const base = makeEmptySheet();
   const merged = Object.assign(base, pc);
   merged.stats = Object.assign({}, base.stats, pc.stats || {});
+  const armorBaseAc = Number(pc.armorBaseAc);
+  merged.armorBaseAc = Number.isFinite(armorBaseAc) ? Math.max(0, armorBaseAc) : base.armorBaseAc;
   merged.scars = Object.assign({}, base.scars, pc.scars || {});
   merged.ransom = Object.assign({}, base.ransom, pc.ransom || {});
+  merged.skillProficiencies = Object.assign({}, pc.skillProficiencies || {});
   merged.inventory = Array.isArray(pc.inventory) ? pc.inventory.map(it => ({
     item: String(it?.item ?? ''),
     qty: Number(it?.qty) || 0,
     weight: String(it?.weight ?? ''),
   })) : [];
-  merged.moves = (Array.isArray(pc.moves) ? pc.moves : []).slice(0, 4);
-  while (merged.moves.length < 4) merged.moves.push({ name: '', desc: '' });
-  merged.moves = merged.moves.map(m => ({ name: String(m?.name ?? ''), desc: String(m?.desc ?? '') }));
+  const moves = Array.isArray(pc.moves) ? pc.moves : base.moves;
+  merged.moves = moves.map(m => ({ name: String(m?.name ?? ''), desc: String(m?.desc ?? '') }));
   const ds = pc.deathSaves || {};
   merged.deathSaves = {
     success: [0,1,2].map(i => Boolean(ds.success?.[i])),
@@ -2139,60 +2490,97 @@ function normalizeSheet(pc) {
       merged.pdfFields[newName] = merged.pdfFields[oldName];
     }
   });
-  // First time we see a legacy sheet, seed pdfFields from the structured data
-  // so the embedded PDF form opens pre-populated.
-  if (!pc.pdfFields || !Object.keys(pc.pdfFields).length) {
-    seedPdfFieldsFromLegacy(merged);
+  if (sheetVersion < 1) migrateLegacyPdfSheet(merged);
+  if (sheetVersion < 2) {
+    const legacyBountyText = String(pc.pdfFields?.bounty ?? '').replace(/,/g, '').trim();
+    const legacyBounty = Number(legacyBountyText);
+    const currentBounty = Number(pc.bounty);
+    if (legacyBountyText && Number.isFinite(legacyBounty) && legacyBounty > 0
+      && (!Number.isFinite(currentBounty) || currentBounty === 0)) {
+      merged.bounty = legacyBounty;
+    }
   }
-  Object.keys(PDF_ABILITY_MOD_FIELDS).forEach((scoreField) => {
-    updatePdfAbilityModifier(merged.pdfFields, scoreField);
-  });
-  if (merged.pdfFields.max_hp !== undefined) merged.maxHp = Number(merged.pdfFields.max_hp) || 100;
-  updatePdfSkillModifiers(merged.pdfFields);
+  merged.ac = calculateArmorClass(merged);
+  merged.digitalSheetVersion = 3;
   return merged;
 }
 
-/* Map legacy structured sheet fields into the new pdfFields map, keyed by the
-  actual AcroForm field names inside Wanted_Character_Sheet_Form_Fillable (4).pdf. */
-function seedPdfFieldsFromLegacy(sheet) {
-  const f = sheet.pdfFields;
-  const put = (k, v) => { if (v !== undefined && v !== null && v !== '' && f[k] === undefined) f[k] = String(v); };
-  put('character_name', sheet.name);
-  put('epithet_title',  sheet.epithet);
-  put('crew_role',      sheet.role);
-  put('age',            sheet.age);
-  put('home_sea_island', sheet.home);
-  ['str','dex','con','int','wis','cha'].forEach((k) => {
-    const long = { str:'strength', dex:'dexterity', con:'constitution', int:'intelligence', wis:'wisdom', cha:'charisma' }[k];
-    if (sheet.stats?.[k] !== undefined) {
-      put(`${long}_score`, sheet.stats[k]);
-      put(`${long}_mod`,   fmtMod(statMod(sheet.stats[k])));
-    }
+function migrateLegacyPdfSheet(sheet) {
+  const fields = sheet.pdfFields;
+  const text = (field, fallback = '') =>
+    fields[field] !== undefined && fields[field] !== '' ? String(fields[field]) : fallback;
+  const number = (field, fallback) => {
+    const rawValue = fields[field];
+    const value = Number(typeof rawValue === 'string' ? rawValue.replace(/,/g, '') : rawValue);
+    return fields[field] !== undefined && fields[field] !== '' && Number.isFinite(value) ? value : fallback;
+  };
+  const checked = (field) => [true, 1, '1', 'true', 'Yes', 'On'].includes(fields[field]);
+  const identity = [
+    ['character_name', 'name'],
+    ['epithet_title', 'epithet'],
+    ['crew_role', 'role'],
+    ['age', 'age'],
+    ['home_sea_island', 'home'],
+  ];
+  identity.forEach(([field, key]) => {
+    if (fields[field] !== undefined) sheet[key] = text(field, sheet[key]);
   });
-  put('armor_class', sheet.ac);
-  put('initiative',  sheet.initiative);
-  put('speed',       sheet.speed);
-  put('max_hp',      sheet.maxHp);
-  put('current_hp',  sheet.hp);
-  put('temp_hp',     sheet.tempHp);
-  put('bounty',      sheet.bounty);
-  (sheet.moves || []).slice(0,4).forEach((m, i) => {
-    put(`signature_move_${i+1}_name`,        m?.name);
-    put(`signature_move_${i+1}_what_it_does`, m?.desc);
+
+  const statFields = {
+    str: 'strength_score',
+    dex: 'dexterity_score',
+    con: 'constitution_score',
+    int: 'intelligence_score',
+    wis: 'wisdom_score',
+    cha: 'charisma_score',
+  };
+  Object.entries(statFields).forEach(([key, field]) => {
+    if (fields[field] !== undefined) sheet.stats[key] = number(field, sheet.stats[key]);
   });
-  (sheet.inventory || []).slice(0,6).forEach((row, i) => {
-    put(`inventory_item_${i+1}`,     row?.item);
-    put(`inventory_quantity_${i+1}`, row?.qty);
+  [
+    ['armor_class', 'ac'],
+    ['initiative', 'initiative'],
+    ['speed', 'speed'],
+    ['max_hp', 'maxHp'],
+    ['current_hp', 'hp'],
+    ['temp_hp', 'tempHp'],
+    ['bounty', 'bounty'],
+    ['inventory_berrys', 'berries'],
+  ].forEach(([field, key]) => {
+    if (key && fields[field] !== undefined) sheet[key] = number(field, sheet[key]);
   });
-  put('physical_scar',              sheet.scars?.physical);
-  put('emotional_scar',             sheet.scars?.emotional);
-  put('reputation_scar',            sheet.scars?.reputation);
-  put('devils_ransom_piece_cursed', sheet.ransom?.piece);
-  put('devils_ransom_curse_name',   sheet.ransom?.curseName);
-  put('devils_ransom_curse_pull_dc', sheet.ransom?.curseDC);
-  // Flashback charges → checkboxes
+
+  sheet.moves = sheet.moves.map((move, index) => ({
+    name: text(`signature_move_${index + 1}_name`, move.name),
+    desc: text(`signature_move_${index + 1}_what_it_does`, move.desc),
+  }));
+  const inventory = Array.from({ length: 6 }, (_, index) => ({
+    item: text(`inventory_item_${index + 1}`),
+    qty: number(`inventory_quantity_${index + 1}`, 0),
+    weight: '',
+  })).filter((item) => item.item || item.qty);
+  if (inventory.length) sheet.inventory = inventory;
+  sheet.scars.physical = text('physical_scar', sheet.scars.physical);
+  sheet.scars.emotional = text('emotional_scar', sheet.scars.emotional);
+  sheet.scars.reputation = text('reputation_scar', sheet.scars.reputation);
+  sheet.ransom.piece = text('devils_ransom_piece_cursed', sheet.ransom.piece);
+  sheet.ransom.curseName = text('devils_ransom_curse_name', sheet.ransom.curseName);
+  if (fields.devils_ransom_curse_pull_dc !== undefined) {
+    sheet.ransom.curseDC = number('devils_ransom_curse_pull_dc', sheet.ransom.curseDC);
+  }
+  sheet.portraitDescription = text('portrait_or_description', sheet.portraitDescription);
+  sheet.homeNotes = text('home_sea_island_notes', sheet.homeNotes);
+  if (fields.health_notes !== undefined) sheet.healthNotes = text('health_notes', sheet.healthNotes);
+  if (fields.devil_fruit !== undefined) sheet.devilFruit = text('devil_fruit', sheet.devilFruit);
+  if (fields.notes !== undefined && !sheet.notes) sheet.notes = text('notes');
+  for (const skill of SKILL_DEFS) {
+    const field = `skill_${skill.key}_proficient`;
+    if (fields[field] !== undefined) sheet.skillProficiencies[skill.key] = checked(field);
+  }
   for (let i = 1; i <= 3; i++) {
-    if (i <= (Number(sheet.flashback) || 0)) f[`flashback_power_${i}`] = true;
+    if (fields[`flashback_power_${i}`] !== undefined) {
+      sheet.flashback = Math.max(sheet.flashback, checked(`flashback_power_${i}`) ? i : 0);
+    }
   }
 }
 
@@ -2233,8 +2621,6 @@ function ensureOwnSheet() {
   const sheet = makeEmptySheet();
   sheet.player = currentUsername;
   sheet.name = currentUsername;
-  sheet.pdfFields = sheet.pdfFields || {};
-  sheet.pdfFields.character_name = currentUsername;
   state.playerSheets.unshift(sheet);
   save();
 }
@@ -2243,11 +2629,7 @@ function addPlayerSheet() {
   if (!requireUsername()) return;
   const sheet = makeEmptySheet();
   sheet.player = currentUsername;
-  if (currentUsername) {
-    sheet.name = currentUsername;
-    sheet.pdfFields = sheet.pdfFields || {};
-    sheet.pdfFields.character_name = currentUsername;
-  }
+  if (currentUsername) sheet.name = currentUsername;
   state.playerSheets.unshift(sheet);
   const root = $('#player-sheet-list');
   if (root) root.dataset.activeSheetId = sheet.id;
@@ -2283,10 +2665,6 @@ function selectPlayerSheetTab(root, sheetId) {
     tab.setAttribute('aria-selected', String(active));
     tab.tabIndex = active ? 0 : -1;
   });
-  if (window.pdfSheet && typeof window.pdfSheet.renderVisible === 'function') {
-    window.pdfSheet.renderVisible();
-    requestAnimationFrame(() => window.pdfSheet?.renderVisible?.());
-  }
 }
 
 function reorderPlayerSheetTabs(root, draggedId, targetId, placeAfter) {
@@ -2320,7 +2698,13 @@ function renderPlayerSheets() {
 
   if (!Array.isArray(state.playerSheets)) state.playerSheets = [];
   // Normalize any legacy sheets in place so they pick up the new fields.
+  const hasUnmigratedSheets = state.playerSheets.some((sheet) =>
+    Number(sheet?.digitalSheetVersion || 0) < 3 || sheet.armorBaseAc === undefined);
   state.playerSheets = state.playerSheets.map(normalizeSheet);
+  if (hasUnmigratedSheets) {
+    if (__applyingRemote) __pendingSheetMigrationSync = true;
+    save();
+  }
 
   // Make sure the logged-in player has their own sheet auto-created.
   ensureOwnSheet();
@@ -2330,6 +2714,7 @@ function renderPlayerSheets() {
   if (addBtn) addBtn.style.display = currentUsername ? '' : 'none';
 
   const visible = visibleSheetsForCurrentUser();
+  if (typeof renderCombatEncounter === 'function') renderCombatEncounter();
 
   if (!currentUsername) {
     root.innerHTML = '<p class="muted">Log in to see your character sheet.</p>';
@@ -2340,24 +2725,17 @@ function renderPlayerSheets() {
     return;
   }
 
-  // Fast path: if the visible sheets, owners, and order are unchanged from
-  // last render, leave the cards alone and just refresh the field values.
-  // This avoids re-rendering the PDF canvas on every Firebase sync update.
-  const signature = visible
-    .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}|${s.portrait?.length || 0}|${Boolean(s.portraitHidden)}`)
-    .join(';');
+  // Keep existing fields mounted during sync so an in-progress edit is not interrupted.
+  const signature = `${currentUsername}|${visible
+    .map(({ s }) => `${s.id}|${s.player || ''}|${s.updatedBy || ''}|${s.portrait?.length || 0}|${s.moves.length}|${unlockedAbilitySheetIds.has(s.id)}`)
+    .join(';')}`;
   if (root.dataset.sheetSig === signature && $$('.player-card', root).length === visible.length) {
-    if (typeof window.refreshPdfSheetFields === 'function') window.refreshPdfSheetFields();
-    // Refresh meta text + notes in place.
     visible.forEach(({ s }) => {
       const card = root.querySelector(`.player-card[data-sheet-id="${cssEsc(s.id)}"]`);
       if (!card) return;
       const meta = card.querySelector('.updated-meta');
       if (meta) meta.textContent = sheetMetaText(s);
-      ['notes'].forEach((k) => {
-        const el = card.querySelector(`[data-pf="${k}"]`);
-        if (el && el !== document.activeElement && el.value !== (s[k] || '')) el.value = s[k] || '';
-      });
+      refreshDigitalSheetValues(card, s);
     });
     return;
   }
@@ -2529,24 +2907,92 @@ function cssEsc(v) {
   return String(v ?? '').replace(/["\\]/g, '\\$&');
 }
 
-/* Card shell: header actions, embedded-PDF mount point, supplemental fields. */
+function sheetValueAtPath(sheet, path) {
+  return path.split('.').reduce((value, key) => value == null ? undefined : value[key], sheet);
+}
+
+function refreshDigitalSheetValues(card, sheet) {
+  $$('[data-sheet-path]', card).forEach((el) => {
+    if (el === document.activeElement) return;
+    const value = sheetValueAtPath(sheet, el.dataset.sheetPath);
+    if (el.type === 'checkbox') el.checked = Boolean(value);
+    else if (value !== undefined && el.value !== String(value)) el.value = value;
+  });
+  $$('[data-flashback-charge]', card).forEach((el, index) => {
+    el.checked = index < clamp(Number(sheet.flashback) || 0, 0, 3);
+  });
+  $$('[data-stat-score-display]', card).forEach((el) => {
+    const score = sheet.stats[el.dataset.statScoreDisplay];
+    if (score !== undefined) el.textContent = String(score);
+  });
+  $$('[data-stat-mod]', card).forEach((el) => {
+    el.textContent = fmtMod(statMod(sheet.stats[el.dataset.statMod]));
+  });
+  $$('[data-skill-mod]', card).forEach((el) => {
+    const skill = SKILL_DEFS.find((definition) => definition.key === el.dataset.skillMod);
+    if (!skill) return;
+    const proficient = Boolean(sheet.skillProficiencies[skill.key]);
+    el.textContent = fmtMod(statMod(sheet.stats[skill.ability]) + (proficient ? 5 : 0));
+  });
+  const hpReadout = card.querySelector('.digital-hp-readout');
+  if (hpReadout) hpReadout.textContent = `${sheet.hp} / ${sheet.maxHp} HP`;
+  const armorClassReadout = card.querySelector('[data-armor-class]');
+  if (armorClassReadout) armorClassReadout.textContent = String(calculateArmorClass(sheet));
+}
+
+/* Render a fully digital, editable player character sheet. */
+const unlockedAbilitySheetIds = new Set();
+
 function renderSheetHtml(pc, idx) {
   const owner = pc.player || '—';
-  const isMine = isSheetOwner(pc);
   const canEdit = canEditSheet(pc);
-  const dicePreferences = currentDicePreferences();
+  const abilitiesUnlocked = canEdit && unlockedAbilitySheetIds.has(pc.id);
   const hasPortrait = Boolean(pc.portrait);
-  const portraitHidden = hasPortrait && Boolean(pc.portraitHidden);
+  const disabled = canEdit ? '' : ' disabled';
+  const field = (label, path, value, type = 'text', attrs = '') =>
+    `<label>${label}<input type="${type}" data-sheet-path="${path}" value="${esc(value)}"${disabled}${attrs} /></label>`;
+  const textarea = (label, path, value, rows = 3, full = false) =>
+    `<label${full ? ' class="full"' : ''}>${label}<textarea data-sheet-path="${path}" rows="${rows}"${disabled}>${esc(value)}</textarea></label>`;
+  const statInputs = STAT_DEFS.map((stat) => abilitiesUnlocked ? `
+    <label class="digital-stat">${stat.label}
+      <input type="number" min="1" max="30" data-sheet-path="stats.${stat.key}" data-stat-score="${stat.key}" value="${esc(pc.stats[stat.key])}"${disabled} />
+      <span class="digital-modifier" data-stat-mod="${stat.key}">${fmtMod(statMod(pc.stats[stat.key]))}</span>
+    </label>` : `
+    <button type="button" class="digital-stat digital-stat-roll" data-roll-ability="${stat.key}" aria-label="Roll ${stat.label} check">
+      <span>${stat.label}</span>
+      <strong data-stat-score-display="${stat.key}">${esc(pc.stats[stat.key])}</strong>
+      <span class="digital-modifier" data-stat-mod="${stat.key}">${fmtMod(statMod(pc.stats[stat.key]))}</span>
+    </button>`).join('');
+  const skills = SKILL_DEFS.map((skill) => abilitiesUnlocked ? `
+    <label class="digital-skill">
+      <input type="checkbox" data-sheet-path="skillProficiencies.${skill.key}"${pc.skillProficiencies[skill.key] ? ' checked' : ''}${disabled} />
+      <span>${skill.label}<small>${skill.ability.toUpperCase()}</small></span>
+      <b class="digital-skill-mod" data-skill-mod="${skill.key}">${fmtMod(statMod(pc.stats[skill.ability]) + (pc.skillProficiencies[skill.key] ? 5 : 0))}</b>
+    </label>` : `
+    <button type="button" class="digital-skill digital-skill-roll" data-roll-skill="${skill.key}" aria-label="Roll ${skill.label} check">
+      <span>${skill.label}<small>${skill.ability.toUpperCase()}</small></span>
+      <b class="digital-skill-mod" data-skill-mod="${skill.key}">${fmtMod(statMod(pc.stats[skill.ability]) + (pc.skillProficiencies[skill.key] ? 5 : 0))}</b>
+    </button>`).join('');
+  const inventory = pc.inventory.map((item, index) => `
+    <div class="digital-inventory-row">
+      <label>Item<input data-sheet-path="inventory.${index}.item" value="${esc(item.item)}"${disabled} /></label>
+      <label>Qty<input type="number" min="0" data-sheet-path="inventory.${index}.qty" value="${esc(item.qty)}"${disabled} /></label>
+      <label>Weight<input data-sheet-path="inventory.${index}.weight" value="${esc(item.weight)}"${disabled} /></label>
+      ${canEdit ? `<button type="button" class="danger" data-sheet-action="remove-inventory" data-row="${index}" aria-label="Remove inventory item">Remove</button>` : ''}
+    </div>`).join('');
   return `
-  <article class="player-card pdf-sheet-card" data-pidx="${idx}" data-sheet-id="${esc(pc.id)}">
+  <article class="player-card digital-sheet-card" data-pidx="${idx}" data-sheet-id="${esc(pc.id)}">
+    <div class="digital-sheet-header">
+      <div>
+        <p class="sheet-owner">Owner: <b>${esc(owner)}</b></p>
+        <h2>${esc(pc.name || 'New Character')}</h2>
+        <p class="digital-sheet-subtitle">${esc([pc.epithet, pc.role].filter(Boolean).join(' · ') || 'Crew character sheet')}</p>
+      </div>
+      ${hasPortrait ? `<img class="digital-sheet-portrait" src="${esc(pc.portrait)}" alt="${esc(pc.name || 'Character')} portrait" />` : ''}
+    </div>
     <div class="sheet-actions-top btn-row">
-      <span class="sheet-owner">Owner: <b>${esc(owner)}</b>${isGmUser() && !isMine ? ' <span class="muted">(viewing as GM)</span>' : ''}</span>
-      ${canEdit ? `<button type="button" data-pa="choose-portrait">${hasPortrait ? 'Change Portrait' : 'Add Portrait'}</button>
+      ${canEdit && !hasPortrait ? `<button type="button" data-pa="choose-portrait">Add Portrait</button>
       <input type="file" data-portrait-file accept="image/*" hidden />` : ''}
-      ${hasPortrait ? `<button type="button" data-pa="hide-portrait"${portraitHidden ? ' hidden' : ''}>Hide Portrait</button>
-      <button type="button" data-pa="show-portrait"${portraitHidden ? '' : ' hidden'}>Show Portrait</button>` : ''}
-      <button type="button" data-pa="download-pdf" class="gold">📄 Download Filled PDF</button>
-      ${isGmUser() ? '<button type="button" class="danger" data-pa="delete">Delete Sheet</button>' : ''}
     </div>
     <div class="sheet-reference-grid" aria-label="Roll reference tables">
       <details class="sheet-reference sheet-reference-outcomes">
@@ -2594,15 +3040,15 @@ function renderSheetHtml(pc, idx) {
         <div class="sheet-reference-panel dice-options-panel">
           <div class="dice-color-controls">
             <label class="dice-color-swatch">Color
-              <input type="color" data-dice-color value="${diceColorHex(dicePreferences)}" aria-label="Dice color" />
+              <input type="color" data-dice-color value="${diceColorHex(currentDicePreferences())}" aria-label="Dice color" />
             </label>
             ${['r', 'g', 'b'].map((channel) => `<label>${channel.toUpperCase()}
-              <input type="number" min="0" max="255" step="1" data-dice-rgb="${channel}" value="${dicePreferences[channel]}" />
+              <input type="number" min="0" max="255" step="1" data-dice-rgb="${channel}" value="${currentDicePreferences()[channel]}" />
             </label>`).join('')}
           </div>
           <div class="dice-roll-modes">
-            <label><input type="checkbox" data-dice-advantage ${dicePreferences.advantage ? 'checked' : ''} /> Advantage</label>
-            <label><input type="checkbox" data-dice-disadvantage ${dicePreferences.disadvantage ? 'checked' : ''} /> Disadvantage</label>
+            <label><input type="checkbox" data-dice-advantage ${currentDicePreferences().advantage ? 'checked' : ''} /> Advantage</label>
+            <label><input type="checkbox" data-dice-disadvantage ${currentDicePreferences().disadvantage ? 'checked' : ''} /> Disadvantage</label>
           </div>
           <div class="dice-options-grid" aria-label="Choose a die to roll">
             ${[4, 6, 8, 10, 12, 20].map((sides) => `<button type="button" data-die-sides="${sides}" title="Roll a d${sides}">d${sides}</button>`).join('')}
@@ -2610,19 +3056,100 @@ function renderSheetHtml(pc, idx) {
         </div>
       </details>
     </div>
-    <div class="pdf-sheet-wrap${canEdit ? '' : ' readonly'}" data-pdf-mount="pending">
-      <div class="pdf-sheet-status muted" role="status" aria-live="polite">Loading fillable character sheet…</div>
-      <canvas class="pdf-sheet-canvas"></canvas>
-      <div class="pdf-sheet-widgets"></div>
-      ${hasPortrait ? `<div class="character-portrait-overlay"${portraitHidden ? ' hidden' : ''}>
-        <img src="${pc.portrait}" alt="${esc(pc.name || 'Character')} portrait" />
-      </div>` : ''}
+    <div class="digital-sheet-content">
+      <section class="digital-sheet-section">
+        <h3>Character</h3>
+        <div class="digital-fields digital-fields-identity">
+          ${field('Character Name', 'name', pc.name)}
+          ${field('Epithet', 'epithet', pc.epithet)}
+          ${field('Crew Role', 'role', pc.role)}
+          ${field('Age', 'age', pc.age)}
+          ${field('Home Sea / Island', 'home', pc.home)}
+          ${field('Level', 'level', pc.level, 'number', ' min="1"')}
+          ${field('Devil Fruit', 'devilFruit', pc.devilFruit)}
+          ${textarea('Home Sea / Island Notes', 'homeNotes', pc.homeNotes, 2, true)}
+          ${textarea('Character Description', 'portraitDescription', pc.portraitDescription, 2, true)}
+        </div>
+      </section>
+      <section class="digital-sheet-section">
+        <div class="digital-section-heading">
+          <h3>Abilities & Skills</h3>
+          ${canEdit ? `<button type="button" data-sheet-action="toggle-abilities-mode" aria-pressed="${abilitiesUnlocked}">${abilitiesUnlocked ? '🔒 Lock to Roll' : '🔓 Unlock to Edit'}</button>` : ''}
+        </div>
+        <div class="digital-stat-grid">${statInputs}</div>
+        <div class="digital-skill-grid">${skills}</div>
+      </section>
+      <section class="digital-sheet-section">
+        <h3>Combat & Health</h3>
+        <div class="digital-fields digital-fields-combat">
+          ${field('Armor Base AC (10 = no armor)', 'armorBaseAc', pc.armorBaseAc, 'number', ' min="0" step="1"')}
+          <label class="digital-ac-readout">Armor Class
+            <output data-armor-class>${calculateArmorClass(pc)}</output>
+            <small>Base + higher full CON/DEX score</small>
+          </label>
+          ${field('Initiative', 'initiative', pc.initiative, 'number')}
+          ${field('Speed', 'speed', pc.speed, 'number', ' min="0"')}
+          ${field('Current HP', 'hp', pc.hp, 'number', ' min="0"')}
+          ${field('Maximum HP', 'maxHp', pc.maxHp, 'number', ' min="1"')}
+          ${field('Temporary HP', 'tempHp', pc.tempHp, 'number', ' min="0"')}
+        </div>
+        <div class="digital-health-controls">
+          <span>Quick HP</span>
+          <label class="digital-hp-adjust">Amount
+            <input type="number" min="1" step="1" value="1" data-hp-adjust required${disabled} />
+          </label>
+          <button type="button" data-sheet-action="hp-delta" data-delta="-1" title="Subtract Armor Class from damage before reducing HP"${canEdit ? '' : ' disabled'}>Damage − AC</button>
+          <button type="button" data-sheet-action="hp-delta" data-delta="1" title="Restore the full amount to HP"${canEdit ? '' : ' disabled'}>Heal +</button>
+          <span class="digital-hp-readout">${esc(pc.hp)} / ${esc(pc.maxHp)} HP</span>
+        </div>
+        <div class="digital-death-saves">
+          <span>Death Saves</span>
+          ${['success', 'fail'].map((kind) => `<div class="digital-save-track"><b>${kind === 'success' ? 'Successes' : 'Failures'}</b>${[0, 1, 2].map((index) => `
+            <label><input type="checkbox" data-sheet-path="deathSaves.${kind}.${index}"${pc.deathSaves[kind][index] ? ' checked' : ''}${disabled} /><span>${index + 1}</span></label>`).join('')}</div>`).join('')}
+        </div>
+        ${textarea('Health Notes', 'healthNotes', pc.healthNotes, 3, true)}
+      </section>
+      <section class="digital-sheet-section">
+        <div class="digital-moves-heading">
+          <h3>Signature Moves</h3>
+          ${canEdit ? '<button type="button" data-sheet-action="add-move">+ Add Move</button>' : ''}
+        </div>
+        <div class="digital-moves">${pc.moves.map((move, index) => `
+          <div class="digital-move">
+            <input type="text" data-sheet-path="moves.${index}.name" value="${esc(move.name)}" placeholder="Name" aria-label="Move ${index + 1} name"${disabled} />
+            <textarea data-sheet-path="moves.${index}.desc" rows="2" placeholder="What it does" aria-label="Move ${index + 1} description"${disabled}>${esc(move.desc)}</textarea>
+            ${canEdit ? `<button type="button" class="danger digital-move-remove" data-sheet-action="remove-move" data-row="${index}" aria-label="Remove Move ${index + 1}">×</button>` : ''}
+          </div>`).join('')}
+        </div>
+      </section>
+      <section class="digital-sheet-section digital-flashback-section">
+        <h3>Flashback Charges</h3>
+        <div class="digital-save-track digital-flashback-track">${[0, 1, 2].map((index) => `
+          <label><input type="checkbox" data-flashback-charge="${index}" aria-label="Flashback charge ${index + 1}"${pc.flashback > index ? ' checked' : ''}${disabled} /><span>${index + 1}</span></label>`).join('')}
+        </div>
+      </section>
+      <section class="digital-sheet-section">
+        <div class="digital-section-heading">
+          <h3>Inventory</h3>
+          ${canEdit ? '<button type="button" data-sheet-action="add-inventory">+ Add Item</button>' : ''}
+        </div>
+        <div class="digital-inventory-currency">${field('Berries', 'berries', pc.berries, 'number', ' min="0"')}</div>
+        <div class="digital-inventory">${inventory || '<p class="muted">No inventory items yet.</p>'}</div>
+      </section>
+      <section class="digital-sheet-section">
+        <h3>Devil’s Ransom</h3>
+        <div class="digital-fields digital-fields-two">
+          ${field('Ransom Piece', 'ransom.piece', pc.ransom.piece)}
+          ${field('Curse Pull DC', 'ransom.curseDC', pc.ransom.curseDC, 'number', ' min="0"')}
+        </div>
+      </section>
+      <section class="digital-sheet-section digital-bounty-section">
+        <h3>Bounty</h3>
+        <label class="digital-bounty-field">Bounty (Berries)
+          <input type="number" min="0" step="1" data-sheet-path="bounty" value="${esc(pc.bounty)}"${disabled} />
+        </label>
+      </section>
     </div>
-    <section class="sheet-extras parchment inset">
-      <div class="grid">
-        <label class="full">General Notes<textarea data-pf="notes" rows="3">${esc(pc.notes)}</textarea></label>
-      </div>
-    </section>
     <div class="muted updated-meta">${sheetMetaText(pc)}</div>
   </article>`;
 }
@@ -2658,7 +3185,6 @@ function attachSheetHandlers(card, sheet, idx) {
       const liveSheet = getSheet();
       if (!liveSheet || typeof reader.result !== 'string') return;
       liveSheet.portrait = reader.result;
-      liveSheet.portraitHidden = false;
       stampSheetEdit(liveSheet);
       save();
       const root = $('#player-sheet-list');
@@ -2673,130 +3199,212 @@ function attachSheetHandlers(card, sheet, idx) {
     const s = getSheet();
     if (metaEl && s) metaEl.textContent = sheetMetaText(s);
   };
-  // Initial values — used only for the first paint of disabled-state on
-  // supplemental fields. The live check above governs every actual edit.
-  const initialCanEdit = canEditSheet(sheet);
-
   const persist = () => {
     const s = getSheet();
     if (!s) return;
     stampSheetEdit(s);
     save();
     refreshMeta();
+    refreshDigitalSheetValues(card, s);
+    const title = card.querySelector('.digital-sheet-header h2');
+    if (title) title.textContent = s.name || 'New Character';
+    const subtitle = card.querySelector('.digital-sheet-subtitle');
+    if (subtitle) subtitle.textContent = [s.epithet, s.role].filter(Boolean).join(' · ') || 'Crew character sheet';
+    if (typeof renderCombatEncounter === 'function') renderCombatEncounter();
   };
 
-  // --- supplemental (non-PDF) fields ---
-  $$('[data-pf]', card).forEach((el) => {
-    if (!initialCanEdit) { el.setAttribute('disabled', 'disabled'); return; }
+  $$('[data-sheet-path]', card).forEach((el) => {
     const handler = () => {
       if (!requireUsername()) return;
       if (!canEditLive()) return;
       const s = getSheet();
       if (!s) return;
-      s[el.dataset.pf] = el.value;
+      setSheetValueAtPath(s, el.dataset.sheetPath,
+        el.type === 'checkbox' ? el.checked : el.type === 'number' ? (Number(el.value) || 0) : el.value);
       persist();
     };
-    el.addEventListener('input', handler);
+    el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', handler);
+  });
+
+  $$('[data-roll-ability], [data-roll-skill]', card).forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!requireUsername() || !canEditLive()) return;
+      const s = getSheet();
+      if (!s) return;
+
+      const abilityKey = button.dataset.rollAbility;
+      const skillKey = button.dataset.rollSkill;
+      let label;
+      let modifier;
+      if (abilityKey) {
+        const ability = STAT_DEFS.find((stat) => stat.key === abilityKey);
+        if (!ability) return;
+        label = `${ability.label} Check`;
+        modifier = statMod(s.stats[ability.key]);
+      } else {
+        const skill = SKILL_DEFS.find((definition) => definition.key === skillKey);
+        if (!skill) return;
+        label = `${skill.label} Check`;
+        modifier = statMod(s.stats[skill.ability]) + (s.skillProficiencies[skill.key] ? 5 : 0);
+      }
+
+      const { die, rolls } = rollPlayerDice(20);
+      const total = die + modifier;
+      const detail = rolls.length > 1
+        ? `${rolls.join(', ')} → kept ${die}; ${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} = ${total}`
+        : `${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} = ${total}`;
+      recordRoll({ character: s.name || s.player, label, sides: 20, die, rolls, modifier, total, detail });
+      showDiceRoll({ sides: 20, die, rolls, modifier, total, label, rollDetail: detail });
+    });
+  });
+
+  $$('[data-flashback-charge]', card).forEach((checkbox) => {
+    checkbox.addEventListener('change', () => {
+      if (!requireUsername() || !canEditLive()) return;
+      const s = getSheet();
+      const chargeIndex = Number(checkbox.dataset.flashbackCharge);
+      if (!s || !Number.isInteger(chargeIndex) || chargeIndex < 0 || chargeIndex > 2) return;
+      s.flashback = checkbox.checked ? chargeIndex + 1 : chargeIndex;
+      persist();
+    });
+  });
+
+  $$('[data-sheet-action]', card).forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (!canEditLive() || !requireUsername()) return;
+      const s = getSheet();
+      if (!s) return;
+      if (btn.dataset.sheetAction === 'toggle-abilities-mode') {
+        if (unlockedAbilitySheetIds.has(sheetId)) unlockedAbilitySheetIds.delete(sheetId);
+        else unlockedAbilitySheetIds.add(sheetId);
+        const root = $('#player-sheet-list');
+        if (root) root.dataset.sheetSig = '';
+        renderPlayerSheets();
+        return;
+      }
+      if (btn.dataset.sheetAction === 'hp-delta') {
+        const amountInput = card.querySelector('[data-hp-adjust]');
+        const amount = readQuickHpAmount(amountInput);
+        if (amount === null) return;
+        const direction = Number(btn.dataset.delta);
+        const armorClass = calculateArmorClass(s);
+        const result = applyQuickHpAdjustment(s, amount, direction, armorClass);
+        persist();
+        showHpChangeToast(result.message, result.changeType);
+        return;
+      }
+      if (btn.dataset.sheetAction === 'add-move') {
+        s.moves.push({ name: '', desc: '' });
+      } else if (btn.dataset.sheetAction === 'remove-move') {
+        const moveIndex = Number(btn.dataset.row);
+        if (!Number.isInteger(moveIndex) || moveIndex < 0 || moveIndex >= s.moves.length) return;
+        s.moves.splice(moveIndex, 1);
+      } else if (btn.dataset.sheetAction === 'add-inventory') {
+        s.inventory.push({ item: '', qty: 1, weight: '' });
+      } else if (btn.dataset.sheetAction === 'remove-inventory') {
+        s.inventory.splice(Number(btn.dataset.row), 1);
+      } else {
+        return;
+      }
+      persist();
+      const root = $('#player-sheet-list');
+      if (root) root.dataset.sheetSig = '';
+      renderPlayerSheets();
+    });
   });
 
   // --- top action buttons ---
   $$('[data-pa]', card).forEach((btn) => {
     btn.addEventListener('click', () => {
-      const act = btn.dataset.pa;
-      if (act === 'choose-portrait') {
-        portraitFile?.click();
-        return;
-      }
-      if (act === 'hide-portrait') {
-        const liveSheet = getSheet();
-        if (liveSheet) {
-          liveSheet.portraitHidden = true;
-          stampSheetEdit(liveSheet);
-          save();
-        }
-        card.querySelector('.character-portrait-overlay')?.setAttribute('hidden', '');
-        btn.hidden = true;
-        const showButton = card.querySelector('[data-pa="show-portrait"]');
-        if (showButton) showButton.hidden = false;
-        window.pdfSheet?.renderVisible?.();
-        return;
-      }
-      if (act === 'show-portrait') {
-        const liveSheet = getSheet();
-        if (liveSheet) {
-          liveSheet.portraitHidden = false;
-          stampSheetEdit(liveSheet);
-          save();
-        }
-        card.querySelector('.character-portrait-overlay')?.removeAttribute('hidden');
-        btn.hidden = true;
-        const hideButton = card.querySelector('[data-pa="hide-portrait"]');
-        if (hideButton) hideButton.hidden = false;
-        return;
-      }
-      if (act === 'download-pdf') {
-        const s = getSheet() || sheet;
-        if (window.pdfSheet && typeof window.pdfSheet.download === 'function') {
-          window.pdfSheet.download(s).catch((e) => {
-            console.error('[pdf-sheet] download failed', e);
-            alert('Could not download filled PDF: ' + (e?.message || e));
-          });
-        }
-        return;
-      }
-      if (!canEditLive()) return;
-      if (act === 'delete') {
-        const s = getSheet();
-        if (!s) return;
-        if (!confirm(`Delete ${s.name || s.player || 'this'} character sheet?`)) return;
-        // Look up the live index — the array may have been re-ordered by a
-        // remote sync since this card was first rendered.
-        const liveIdx = state.playerSheets.findIndex((p) => p && p.id === sheetId);
-        if (liveIdx >= 0) state.playerSheets.splice(liveIdx, 1);
-        save();
-        renderPlayerSheets();
-      }
+      portraitFile?.click();
     });
   });
 
-  // --- mount the embedded fillable PDF form ---
-  if (window.pdfSheet && typeof window.pdfSheet.mount === 'function') {
-    window.pdfSheet.mount(card, sheet, {
-      canEdit: initialCanEdit,
-      onChange: (fieldName, value) => {
-        if (!requireUsername()) return;
-        if (!canEditLive()) return;
-        const s = getSheet();
-        if (!s) return;
-        s.pdfFields = s.pdfFields || {};
-        if (value === '' || value === false || value === null || value === undefined) {
-          delete s.pdfFields[fieldName];
-        } else {
-          s.pdfFields[fieldName] = value;
-        }
-        const updatedModifier = updatePdfAbilityModifier(s.pdfFields, fieldName);
-        const updatedSkills = updatePdfSkillModifiers(s.pdfFields, fieldName);
-        if (fieldName === 'constitution_score') s.maxHp = Number(s.pdfFields.max_hp) || 100;
-        // Keep a few mirrored convenience fields in sync so display names update.
-        if (fieldName === 'character_name') s.name = String(value || '');
-        if (fieldName === 'bounty')         s.bounty = Number(value) || 0;
-        if ((updatedModifier || updatedSkills) && window.pdfSheet) window.pdfSheet.refreshAll();
-        persist();
-      },
-    });
-  } else {
-    const wrap = card.querySelector('.pdf-sheet-wrap');
-    if (wrap) wrap.querySelector('.pdf-sheet-status').textContent =
-      'PDF renderer not loaded. Check your network connection and reload.';
+}
+
+function setSheetValueAtPath(sheet, path, value) {
+  const keys = path.split('.');
+  let target = sheet;
+  keys.slice(0, -1).forEach((key) => { target = target[key]; });
+  const key = keys[keys.length - 1];
+  if (path.startsWith('stats.')) value = clamp(Number(value) || 1, 1, 30);
+  else if (path === 'armorBaseAc') value = Math.max(0, Number(value) || 0);
+  else if (path === 'level') value = Math.max(1, Number(value) || 1);
+  else if (path === 'flashback') value = clamp(Number(value) || 0, 0, 3);
+  else if (path === 'maxHp') {
+    value = Math.max(1, Number(value) || 1);
+    sheet.hp = Math.min(Number(sheet.hp) || 0, value);
+  }
+  else if (path === 'hp') value = clamp(Number(value) || 0, 0, Math.max(1, Number(sheet.maxHp) || 1));
+  else if (['tempHp', 'bounty', 'berries', 'speed', 'ransom.curseDC'].includes(path)) {
+    value = Math.max(0, Number(value) || 0);
+  } else if (path.endsWith('.qty') || path.endsWith('.damage')) {
+    value = Math.max(0, Number(value) || 0);
+  }
+  target[key] = value;
+  if (path === 'armorBaseAc' || path === 'stats.dex' || path === 'stats.con') {
+    sheet.ac = calculateArmorClass(sheet);
   }
 }
 
-/* Called by sync.js / app.js after applyRemoteState — gives the PDF module a
-   chance to refresh widget values without rebuilding the canvas. */
-window.refreshPdfSheetFields = function () {
-  if (!window.pdfSheet || typeof window.pdfSheet.refreshAll !== 'function') return;
-  window.pdfSheet.refreshAll();
-};
+let hpToastTimer = null;
+let hpToastHideTimer = null;
+
+function readQuickHpAmount(input) {
+  if (!input || !input.reportValidity()) return null;
+  const amount = Number(input.value);
+  if (!Number.isSafeInteger(amount)) {
+    input.setCustomValidity('Enter a whole-number amount.');
+    input.reportValidity();
+    input.setCustomValidity('');
+    return null;
+  }
+  return amount;
+}
+
+function applyQuickHpAdjustment(target, amount, direction, armorClass) {
+  const hpBefore = Number(target.hp) || 0;
+  const maxHp = Math.max(1, Number(target.maxHp) || 1);
+  const effectiveDamage = direction < 0 ? Math.max(0, amount - armorClass) : 0;
+  const adjustment = direction < 0 ? -effectiveDamage : amount;
+  target.hp = clamp(hpBefore + adjustment, 0, maxHp);
+  const actualChange = Number(target.hp) - hpBefore;
+  const message = direction < 0
+    ? `Damage ${amount} − AC ${armorClass} = ${effectiveDamage}; ${Math.abs(actualChange)} HP lost (${hpBefore} → ${target.hp}/${maxHp}).`
+    : `Heal +${amount}; ${actualChange} HP restored (${hpBefore} → ${target.hp}/${maxHp}).`;
+  return { message, changeType: direction < 0 ? 'damage' : 'heal' };
+}
+
+function showHpChangeToast(message, changeType) {
+  const toast = $('#hp-change-toast');
+  if (!toast) {
+    console.error('HP change notification element is missing.');
+    return;
+  }
+  clearTimeout(hpToastTimer);
+  clearTimeout(hpToastHideTimer);
+  toast.classList.remove('is-visible', 'damage', 'heal');
+  toast.classList.add(changeType);
+  const icon = document.createElement('span');
+  icon.className = 'hp-change-toast-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = changeType === 'damage' ? '⚔' : '✚';
+  const copy = document.createElement('span');
+  copy.className = 'hp-change-toast-copy';
+  const heading = document.createElement('strong');
+  heading.textContent = changeType === 'damage' ? 'Damage Taken' : 'HP Restored';
+  const detail = document.createElement('span');
+  detail.className = 'hp-change-toast-detail';
+  detail.textContent = message;
+  copy.append(heading, detail);
+  toast.replaceChildren(icon, copy);
+  toast.hidden = false;
+  requestAnimationFrame(() => toast.classList.add('is-visible'));
+  hpToastTimer = setTimeout(() => {
+    toast.classList.remove('is-visible');
+    hpToastHideTimer = setTimeout(() => { toast.hidden = true; }, 300);
+  }, 2400);
+}
 
 /* ===========================================================
    SEA TRAVEL — Routes
@@ -3317,7 +3925,7 @@ renderRollLog();
 renderPlayerSheets();
 initNpcTab();
 updateGmOnlyUI();
+initCombatTracker();
 renderSharedImages();
 renderTravel();
 renderShip();
-
