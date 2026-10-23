@@ -11,7 +11,7 @@
 <title>The Devil's Ransom</title>
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" sizes="192x192" href="assets/icon-192.png" />
-<link rel="stylesheet" href="styles.css?v=52" />
+<link rel="stylesheet" href="styles.css?v=66" />
 </head>
 <body>
 <div id="fire-damage-overlay" class="fire-damage-overlay" aria-hidden="true"></div>
@@ -24,6 +24,7 @@
   </div>
 </div>
 <div id="dice-roll-overlay" class="dice-roll-overlay" aria-hidden="true">
+  <div id="dice-roll-word-effects" class="dice-roll-word-effects" aria-hidden="true"></div>
   <div class="dice-roll-stage" role="status" aria-live="assertive">
     <div id="dice-roll-kind" class="dice-roll-kind">Roll</div>
     <div id="dice-three-wrap" class="dice-three-wrap">
@@ -32,6 +33,7 @@
       <span id="dice-roll-face" class="dice-roll-face">20</span>
     </div>
     <div id="dice-roll-result" class="dice-roll-result">Rolling…</div>
+    <div class="dice-roll-dismiss-hint">Tap anywhere or press Esc to dismiss · closes in 15 seconds</div>
   </div>
 </div>
 <div id="hp-change-toast" class="hp-change-toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
@@ -381,7 +383,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=72"></script>
+<script src="app.js?v=96"></script>
 <script src="map.js?v=8"></script>
 <script src="sync.js?v=7"></script>
 </body>

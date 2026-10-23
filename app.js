@@ -772,18 +772,33 @@ function addNpcToEncounter(templateName) {
   if (!npc) return;
   if (!Array.isArray(state.npcEncounter)) state.npcEncounter = [];
   const matching = state.npcEncounter.filter((entry) => entry.templateName === npc.name).length;
+  const name = matching ? `${npc.name} ${matching + 1}` : npc.name;
+  const die = roll(20);
+  const modifier = statMod(npc.stats[1]);
+  const initiative = die + modifier;
+  const detail = `${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} DEX = ${initiative}`;
   state.npcEncounter.push({
     id: uid(),
     templateName: npc.name,
-    name: matching ? `${npc.name} ${matching + 1}` : npc.name,
+    name,
     tier: npc.tier,
     ac: npc.ac,
-    initiative: 0,
+    initiative,
     maxHp: npc.hp,
     hp: npc.hp
   });
-  save();
+  recordRoll({
+    character: name,
+    label: 'Initiative',
+    sides: 20,
+    die,
+    rolls: [die],
+    modifier,
+    total: initiative,
+    detail
+  });
   renderNpcEncounter();
+  showDiceRoll({ sides: 20, die, rolls: [die], modifier, total: initiative, label: `${name} Initiative`, rollDetail: detail });
 }
 
 function npcEncounterCardHtml(combatant) {
@@ -945,6 +960,11 @@ function getCombatTurn() {
 
 function combatantCardHtml(combatant, turn) {
   const percent = clamp((combatant.hp / combatant.maxHp) * 100, 0, 100);
+  const healthLevel = percent > 50 ? 'full' : percent > 25 ? 'half' : 'quarter';
+  const showExactHp = isGmUser();
+  const healthLabel = showExactHp
+    ? `Health: ${combatant.hp} of ${combatant.maxHp}`
+    : `Health: ${healthLevel}`;
   const isActive = turn.started && turn.activeId === combatant.id && combatant.hp > 0 && combatant.enabled;
   const defeated = combatant.hp <= 0;
   const sidelined = combatant.type === 'player' && !combatant.enabled;
@@ -972,7 +992,7 @@ function combatantCardHtml(combatant, turn) {
       ? `<button type="button" class="combatant-participation${sidelined ? ' sidelined' : ''}" data-toggle-crew="${esc(combatant.id)}" aria-label="${sidelined ? 'Add' : 'Remove'} ${esc(combatant.name)} ${sidelined ? 'to' : 'from'} encounter">${sidelined ? 'Add to Encounter' : 'Remove from Encounter'}</button>`
       : ''}
     <div class="combatant-vitals">
-      <span><small>HP</small><b>${combatant.hp} / ${combatant.maxHp}</b></span>
+      ${showExactHp ? `<span><small>HP</small><b>${combatant.hp} / ${combatant.maxHp}</b></span>` : ''}
       <span><small>AC</small><b>${combatant.ac}</b></span>
       <strong class="combatant-status">${defeated ? 'Defeated' : sidelined ? 'Sidelined' : isActive ? 'Current Turn' : 'Ready'}</strong>
     </div>
@@ -983,7 +1003,7 @@ function combatantCardHtml(combatant, turn) {
       <button type="button" data-combat-hp-action="damage" aria-label="Apply damage to ${esc(combatant.name)}">− Damage</button>
       <button type="button" data-combat-hp-action="heal" aria-label="Heal ${esc(combatant.name)}">+ Heal</button>
     </div>` : ''}
-    <div class="combatant-hp-bar"><div style="width:${percent}%"></div></div>
+    <div class="combatant-hp-bar" data-health-level="${healthLevel}" role="img" aria-label="${healthLabel}"><div style="width:${percent}%"></div></div>
   </article>`;
 }
 
@@ -1271,6 +1291,7 @@ function initCombatTracker() {
 let diceFaceTimer = null;
 let diceSettleTimer = null;
 let diceHideTimer = null;
+let diceEffectTimer = null;
 let dice3d = null;
 
 function currentDicePreferences() {
@@ -1286,6 +1307,7 @@ function currentDicePreferences() {
     r: channel('r', 216),
     g: channel('g', 168),
     b: channel('b', 63),
+    numberColor: /^#[0-9a-f]{6}$/i.test(stored.numberColor) ? stored.numberColor.toLowerCase() : '#271006',
     advantage: Boolean(stored.advantage),
     disadvantage: Boolean(stored.disadvantage)
   };
@@ -1370,29 +1392,30 @@ function numberedDieFaces(geometry) {
   }));
 }
 
-function dieNumberTexture(value) {
+function dieNumberTexture(value, numberColor) {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
   const context = canvas.getContext('2d');
+  const text = String(value);
   context.clearRect(0, 0, 128, 128);
-  context.fillStyle = '#271006';
+  context.fillStyle = numberColor;
   context.strokeStyle = '#f7df94';
   context.lineWidth = 6;
   context.lineJoin = 'round';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.font = `bold ${value >= 10 ? 78 : 92}px Georgia`;
-  context.strokeText(String(value), 64, 62);
-  context.fillText(String(value), 64, 62);
-  if (value === 6 || value === 9) context.fillRect(46, 111, 36, 6);
+  context.font = `bold ${text.length >= 3 ? 52 : text.length >= 2 ? 78 : 92}px Georgia`;
+  context.strokeText(text, 64, 62);
+  context.fillText(text, 64, 62);
+  if (text === '6' || text === '9') context.fillRect(46, 111, 36, 6);
   const texture = new THREE.CanvasTexture(canvas);
   texture.encoding = THREE.sRGBEncoding;
   texture.needsUpdate = true;
   return texture;
 }
 
-function addDieFaceNumbers(group, faces, sides) {
+function addDieFaceNumbers(group, faces, sides, numberColor, labels = null) {
   const labelSize = sides === 20 ? 0.46
     : sides === 12 ? 0.52
     : sides === 8 ? 0.58
@@ -1403,7 +1426,7 @@ function addDieFaceNumbers(group, faces, sides) {
     const label = new THREE.Mesh(
       new THREE.PlaneGeometry(labelSize, labelSize),
       new THREE.MeshBasicMaterial({
-        map: dieNumberTexture(index + 1),
+        map: dieNumberTexture(labels?.[index] ?? index + 1, numberColor),
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide
@@ -1452,7 +1475,7 @@ function initDice3d() {
   }
 }
 
-function buildDie3d(sides) {
+function buildDie3d(sides, numberColor, labels = null) {
   const geometry = diceGeometry(sides);
   const solid = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
     color: 0xd8a83f,
@@ -1462,22 +1485,51 @@ function buildDie3d(sides) {
     metalness: 0.28,
     roughness: 0.38
   }));
+  const edgeGeometry = new THREE.EdgesGeometry(geometry, 12);
   const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(geometry, 12),
-    new THREE.LineBasicMaterial({ color: 0x4c1e0a, transparent: true, opacity: 0.82 })
+    edgeGeometry,
+    new THREE.LineBasicMaterial({
+      color: 0x4c1e0a,
+      transparent: true,
+      opacity: 0.82
+    })
   );
   const faces = numberedDieFaces(geometry);
   const group = new THREE.Group();
   group.add(solid, edges);
-  addDieFaceNumbers(group, faces, sides);
+  addDieFaceNumbers(group, faces, sides, numberColor, labels);
   return { group, faces };
 }
 
+function buildPercentileDice(numberColor, count) {
+  const onesLabels = Array.from({ length: 10 }, (_, index) => String(index + 1));
+  const tensLabels = Array.from({ length: 10 }, (_, index) => String(index * 10).padStart(2, '0'));
+  return Array.from({ length: count }, () => {
+    const ones = buildDie3d(10, numberColor, onesLabels);
+    const tens = buildDie3d(10, numberColor, tensLabels);
+    const pair = new THREE.Group();
+    const innerScale = count > 1 ? 0.48 : 0.68;
+    ones.group.position.x = count > 1 ? -0.52 : -0.58;
+    tens.group.position.x = count > 1 ? 0.52 : 0.58;
+    ones.group.scale.setScalar(innerScale);
+    tens.group.scale.setScalar(innerScale);
+    pair.add(ones.group, tens.group);
+    return {
+      group: pair,
+      faces: { ones: ones.faces, tens: tens.faces }
+    };
+  });
+}
+
 function startDice3d(sides, reducedMotion, rolls = []) {
+  const wrap = $('#dice-three-wrap');
+  wrap?.setAttribute('data-die-sides', String(sides));
   const view = initDice3d();
   if (!view) return;
+  wrap?.classList.remove('webgl-unavailable');
   const count = rolls.length > 1 ? 2 : 1;
-  if (view.sides !== sides || view.count !== count) {
+  const numberColor = currentDicePreferences().numberColor;
+  if (view.sides !== sides || view.count !== count || view.numberColor !== numberColor) {
     view.groups.forEach((group) => {
       view.scene.remove(group);
       group.traverse((child) => {
@@ -1486,7 +1538,9 @@ function startDice3d(sides, reducedMotion, rolls = []) {
         child.material?.dispose?.();
       });
     });
-    const dice = Array.from({ length: count }, () => buildDie3d(sides));
+    const dice = sides === 100
+      ? buildPercentileDice(numberColor, count)
+      : Array.from({ length: count }, () => buildDie3d(sides, numberColor));
     view.groups = dice.map((item) => item.group);
     view.faceSets = dice.map((item) => item.faces);
     view.groups.forEach((group) => view.scene.add(group));
@@ -1494,14 +1548,30 @@ function startDice3d(sides, reducedMotion, rolls = []) {
     view.faces = view.faceSets[0];
     view.sides = sides;
     view.count = count;
+    view.numberColor = numberColor;
   }
   const dieColor = diceColorHex();
   view.groups.forEach((group, index) => {
-    group.children[0].material.color.set(dieColor);
-    group.children[0].material.emissive.set(dieColor).multiplyScalar(0.16);
-    group.position.x = count === 2 ? (index === 0 ? -0.82 : 0.82) : 0;
-    group.scale.setScalar(count === 2 ? 0.76 : 1);
-    group.rotation.set(0.25 + index * 0.4, -0.35 - index * 0.3, 0.1 + index * 0.2);
+    const physicalDice = sides === 100 ? group.children : [group];
+    physicalDice.forEach((physicalDie) => {
+      physicalDie.children[0].material.color.set(dieColor);
+      physicalDie.children[0].material.emissive.set(dieColor).multiplyScalar(0.16);
+    });
+    if (sides === 100) {
+      group.position.set(0, count === 2 ? (index === 0 ? 0.52 : -0.52) : 0, 0);
+      group.scale.setScalar(1);
+    } else {
+      group.position.x = count === 2 ? (index === 0 ? -0.82 : 0.82) : 0;
+      group.scale.setScalar(count === 2 ? 0.76 : 1);
+    }
+    if (sides === 100) {
+      group.rotation.set(0, 0, 0);
+      physicalDice.forEach((physicalDie, physicalIndex) => {
+        physicalDie.rotation.set(0.25 + physicalIndex * 0.4, -0.35 - physicalIndex * 0.3, 0.1 + physicalIndex * 0.2);
+      });
+    } else {
+      group.rotation.set(0.25 + index * 0.4, -0.35 - index * 0.3, 0.1 + index * 0.2);
+    }
   });
   view.wrap.style.setProperty('--dice-color', dieColor);
   cancelAnimationFrame(view.frame);
@@ -1510,9 +1580,12 @@ function startDice3d(sides, reducedMotion, rolls = []) {
     if (!overlay?.classList.contains('active')) return;
     if (overlay.classList.contains('rolling') && !reducedMotion) {
       view.groups.forEach((group, index) => {
-        group.rotation.x += 0.14 + index * 0.035;
-        group.rotation.y += 0.22 - index * 0.03;
-        group.rotation.z += 0.08 + index * 0.025;
+        const diceToAnimate = view.sides === 100 ? group.children : [group];
+        diceToAnimate.forEach((die, dieIndex) => {
+          die.rotation.x += 0.14 + dieIndex * 0.035;
+          die.rotation.y += 0.22 - dieIndex * 0.03;
+          die.rotation.z += 0.08 + dieIndex * 0.025;
+        });
       });
     }
     view.renderer.render(view.scene, view.camera);
@@ -1521,11 +1594,8 @@ function startDice3d(sides, reducedMotion, rolls = []) {
   animate();
 }
 
-function settleDice3d(value, dieIndex = 0) {
-  const view = dice3d;
-  const group = view?.groups?.[dieIndex];
-  const faces = view?.faceSets?.[dieIndex];
-  const face = faces?.[(Number(value) - 1) % faces.length];
+function settleDieFace(group, faces, faceIndex) {
+  const face = faces?.[faceIndex];
   if (!group || !face) return;
   const forward = new THREE.Vector3(0, 0, 1);
   const faceForward = new THREE.Quaternion().setFromUnitVectors(face.normal, forward);
@@ -1534,6 +1604,59 @@ function settleDice3d(value, dieIndex = 0) {
     .applyQuaternion(faceForward);
   const straighten = new THREE.Quaternion().setFromAxisAngle(forward, Math.atan2(labelUp.x, labelUp.y));
   group.quaternion.copy(straighten.multiply(faceForward));
+}
+
+function percentileDiceFaces(value) {
+  const total = clamp(Math.trunc(Number(value) || 1), 1, 100);
+  return {
+    ones: total % 10 || 10,
+    tens: Math.floor((total - 1) / 10) * 10
+  };
+}
+
+function stopDiceWordEffects() {
+  clearInterval(diceEffectTimer);
+  diceEffectTimer = null;
+  $('#dice-roll-word-effects')?.replaceChildren();
+}
+
+function startDiceWordEffects(type) {
+  const effects = $('#dice-roll-word-effects');
+  if (!effects) return;
+  stopDiceWordEffects();
+  const words = type === 'success'
+    ? ['CRITICAL!', 'SUCCESS!', 'NATURAL!', 'AMAZING!', 'YES!']
+    : ['CRITICAL!', 'FAIL!', 'OOPS!', 'NATURAL 1!', 'OH NO!'];
+  const spawnWord = () => {
+    if (!$('#dice-roll-overlay')?.classList.contains('active')) {
+      stopDiceWordEffects();
+      return;
+    }
+    const word = document.createElement('span');
+    word.className = `dice-roll-word dice-roll-word-${type}`;
+    word.textContent = pick(words);
+    word.style.left = `${5 + Math.random() * 90}%`;
+    word.style.top = `${5 + Math.random() * 88}%`;
+    word.style.setProperty('--word-tilt', `${Math.random() * 36 - 18}deg`);
+    effects.appendChild(word);
+    word.addEventListener('animationend', () => word.remove(), { once: true });
+  };
+  spawnWord();
+  diceEffectTimer = setInterval(spawnWord, 480);
+}
+
+function settleDice3d(value, dieIndex = 0) {
+  const view = dice3d;
+  const group = view?.groups?.[dieIndex];
+  const faces = view?.faceSets?.[dieIndex];
+  if (!group || !faces) return;
+  if (view.sides === 100) {
+    const result = percentileDiceFaces(value);
+    settleDieFace(group.children[0], faces.ones, result.ones - 1);
+    settleDieFace(group.children[1], faces.tens, result.tens / 10);
+  } else {
+    settleDieFace(group, faces, (Number(value) - 1) % faces.length);
+  }
   view.renderer.render(view.scene, view.camera);
 }
 
@@ -1547,14 +1670,18 @@ function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, 
   clearInterval(diceFaceTimer);
   clearTimeout(diceSettleTimer);
   clearTimeout(diceHideTimer);
+  stopDiceWordEffects();
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const numberColor = currentDicePreferences().numberColor;
   const finalDie = clamp(Number(die) || 1, 1, sides);
   const activeRolls = rolls.length > 1 ? rolls.slice(0, 2) : [finalDie];
   const numericModifier = Number(modifier) || 0;
   kind.textContent = `${label} · d${sides}`;
+  face.style.color = numberColor;
+  overlay.style.setProperty('--dice-number-color', numberColor);
   result.textContent = 'Rolling…';
   face.textContent = reducedMotion ? finalDie : roll(sides);
-  overlay.classList.remove('settled');
+  overlay.classList.remove('settled', 'critical-failure', 'critical-success');
   overlay.classList.add('active', 'rolling');
   overlay.setAttribute('aria-hidden', 'false');
   startDice3d(sides, reducedMotion, activeRolls);
@@ -1562,16 +1689,43 @@ function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, 
   const settle = () => {
     clearInterval(diceFaceTimer);
     face.textContent = finalDie;
-    result.textContent = rollDetail || (numericModifier
-      ? `${finalDie} ${numericModifier >= 0 ? '+' : '−'} ${Math.abs(numericModifier)} = ${Number(total) || 0}`
-      : `${finalDie}`);
+    const isCriticalFailure = finalDie === 1;
+    const isCriticalSuccess = finalDie === sides;
+    if (isCriticalFailure) {
+      overlay.classList.add('critical-failure');
+      kind.textContent = `Natural 1! ${label}`;
+      startDiceWordEffects('failure');
+    } else if (isCriticalSuccess) {
+      overlay.classList.add('critical-success');
+      kind.textContent = `Natural ${sides}! ${label}`;
+      startDiceWordEffects('success');
+    }
+    const detailText = rollDetail
+      ? rollDetail.replace(/\s*=\s*-?\d+(?:\.\d+)?\s*$/, '').trim()
+      : numericModifier
+        ? `${finalDie} ${numericModifier >= 0 ? '+' : '−'} ${Math.abs(numericModifier)}`
+        : '';
+    const numericTotal = Number(total);
+    const displayedTotal = Number.isFinite(numericTotal) ? numericTotal : finalDie;
+    result.replaceChildren();
+    if (detailText) {
+      const detail = document.createElement('span');
+      detail.className = 'dice-roll-detail';
+      detail.textContent = detailText;
+      result.appendChild(detail);
+    }
+    const totalBadge = document.createElement('span');
+    totalBadge.className = 'dice-roll-total';
+    const totalLabel = document.createElement('span');
+    totalLabel.textContent = 'TOTAL';
+    const totalValue = document.createElement('strong');
+    totalValue.textContent = String(displayedTotal);
+    totalBadge.append(totalLabel, totalValue);
+    result.appendChild(totalBadge);
     activeRolls.forEach((value, index) => settleDice3d(value, index));
     overlay.classList.remove('rolling');
     overlay.classList.add('settled');
-    diceHideTimer = setTimeout(() => {
-      overlay.classList.remove('active', 'settled');
-      overlay.setAttribute('aria-hidden', 'true');
-    }, reducedMotion ? 700 : 1100);
+    diceHideTimer = setTimeout(dismissDiceRoll, 15000);
   };
 
   if (reducedMotion) settle();
@@ -1581,6 +1735,22 @@ function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, 
   }
 }
 window.showDiceRoll = showDiceRoll;
+
+function dismissDiceRoll() {
+  const overlay = $('#dice-roll-overlay');
+  if (!overlay?.classList.contains('active')) return;
+  clearInterval(diceFaceTimer);
+  clearTimeout(diceSettleTimer);
+  clearTimeout(diceHideTimer);
+  stopDiceWordEffects();
+  overlay.classList.remove('active', 'rolling', 'settled', 'critical-failure', 'critical-success');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+$('#dice-roll-overlay')?.addEventListener('click', dismissDiceRoll);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') dismissDiceRoll();
+});
 
 /* ===========================================================
    Shared roll log
@@ -2420,10 +2590,10 @@ function makeEmptySheet() {
     charClass: '',
     // Signature moves (4 slots)
     moves: [
-      { name: '', desc: '' },
-      { name: '', desc: '' },
-      { name: '', desc: '' },
-      { name: '', desc: '' },
+      { name: '', number: 0, desc: '' },
+      { name: '', number: 0, desc: '' },
+      { name: '', number: 0, desc: '' },
+      { name: '', number: 0, desc: '' },
     ],
     // Flashback Power-Up (3 charges)
     flashback: 0,
@@ -2471,7 +2641,11 @@ function normalizeSheet(pc) {
     weight: String(it?.weight ?? ''),
   })) : [];
   const moves = Array.isArray(pc.moves) ? pc.moves : base.moves;
-  merged.moves = moves.map(m => ({ name: String(m?.name ?? ''), desc: String(m?.desc ?? '') }));
+  merged.moves = moves.map(m => ({
+    name: String(m?.name ?? ''),
+    number: Number.isFinite(Number(m?.number)) ? Number(m.number) : 0,
+    desc: String(m?.desc ?? '')
+  }));
   const ds = pc.deathSaves || {};
   merged.deathSaves = {
     success: [0,1,2].map(i => Boolean(ds.success?.[i])),
@@ -2797,29 +2971,26 @@ function renderPlayerSheets() {
           button.closest('details')?.removeAttribute('open');
         });
       });
-      const rgbInputs = ['r', 'g', 'b'].map((channel) => sharedReferences.querySelector(`[data-dice-rgb="${channel}"]`));
       const colorInput = sharedReferences.querySelector('[data-dice-color]');
+      const numberColorInput = sharedReferences.querySelector('[data-dice-number-color]');
       const advantageInput = sharedReferences.querySelector('[data-dice-advantage]');
       const disadvantageInput = sharedReferences.querySelector('[data-dice-disadvantage]');
       const saveDicePreferences = () => {
         const preferences = currentDicePreferences();
-        ['r', 'g', 'b'].forEach((channel, index) => {
-          preferences[channel] = clamp(Number(rgbInputs[index]?.value) || 0, 0, 255);
-          if (rgbInputs[index]) rgbInputs[index].value = preferences[channel];
-        });
+        const diceColor = colorInput?.value;
+        if (diceColor && /^#[0-9a-f]{6}$/i.test(diceColor)) {
+          ['r', 'g', 'b'].forEach((channel, index) => {
+            preferences[channel] = parseInt(diceColor.slice(1 + index * 2, 3 + index * 2), 16);
+          });
+        }
+        if (numberColorInput) preferences.numberColor = numberColorInput.value;
         preferences.advantage = Boolean(advantageInput?.checked);
         preferences.disadvantage = Boolean(disadvantageInput?.checked);
         if (colorInput) colorInput.value = diceColorHex(preferences);
         save();
       };
-      rgbInputs.forEach((input) => input?.addEventListener('change', saveDicePreferences));
-      colorInput?.addEventListener('input', () => {
-        const color = colorInput.value;
-        rgbInputs.forEach((input, index) => {
-          if (input) input.value = parseInt(color.slice(1 + index * 2, 3 + index * 2), 16);
-        });
-        saveDicePreferences();
-      });
+      colorInput?.addEventListener('input', saveDicePreferences);
+      numberColorInput?.addEventListener('input', saveDicePreferences);
       advantageInput?.addEventListener('change', () => {
         if (advantageInput.checked && disadvantageInput) disadvantageInput.checked = false;
         saveDicePreferences();
@@ -3045,21 +3216,21 @@ function renderSheetHtml(pc, idx) {
       </details>
       <details class="sheet-reference sheet-reference-dice">
         <summary>Dice Options</summary>
-        <div class="sheet-reference-panel dice-options-panel">
-          <div class="dice-color-controls">
-            <label class="dice-color-swatch">Color
-              <input type="color" data-dice-color value="${diceColorHex(currentDicePreferences())}" aria-label="Dice color" />
-            </label>
-            ${['r', 'g', 'b'].map((channel) => `<label>${channel.toUpperCase()}
-              <input type="number" min="0" max="255" step="1" data-dice-rgb="${channel}" value="${currentDicePreferences()[channel]}" />
-            </label>`).join('')}
-          </div>
-          <div class="dice-roll-modes">
+          <div class="sheet-reference-panel dice-options-panel">
+            <div class="dice-color-controls">
+              <label class="dice-color-swatch">Dice Color
+                <input type="color" data-dice-color value="${diceColorHex(currentDicePreferences())}" aria-label="Dice color" />
+              </label>
+              <label class="dice-color-swatch">Number Color
+                <input type="color" data-dice-number-color value="${currentDicePreferences().numberColor}" aria-label="Dice number color" />
+              </label>
+            </div>
+            <div class="dice-roll-modes">
             <label><input type="checkbox" data-dice-advantage ${currentDicePreferences().advantage ? 'checked' : ''} /> Advantage</label>
             <label><input type="checkbox" data-dice-disadvantage ${currentDicePreferences().disadvantage ? 'checked' : ''} /> Disadvantage</label>
           </div>
           <div class="dice-options-grid" aria-label="Choose a die to roll">
-            ${[4, 6, 8, 10, 12, 20].map((sides) => `<button type="button" data-die-sides="${sides}" title="Roll a d${sides}">d${sides}</button>`).join('')}
+            ${[4, 6, 8, 10, 12, 20, 100].map((sides) => `<button type="button" data-die-sides="${sides}" title="Roll a d${sides}">d${sides}</button>`).join('')}
           </div>
         </div>
       </details>
@@ -3125,6 +3296,7 @@ function renderSheetHtml(pc, idx) {
         <div class="digital-moves">${pc.moves.map((move, index) => `
           <div class="digital-move">
             <input type="text" data-sheet-path="moves.${index}.name" value="${esc(move.name)}" placeholder="Name" aria-label="Move ${index + 1} name"${disabled} />
+            <input type="number" data-sheet-path="moves.${index}.number" value="${esc(move.number)}" placeholder="Number" aria-label="Move ${index + 1} number" step="1"${disabled} />
             <textarea data-sheet-path="moves.${index}.desc" rows="2" placeholder="What it does" aria-label="Move ${index + 1} description"${disabled}>${esc(move.desc)}</textarea>
             ${canEdit ? `<button type="button" class="danger digital-move-remove" data-sheet-action="remove-move" data-row="${index}" aria-label="Remove Move ${index + 1}">×</button>` : ''}
           </div>`).join('')}
@@ -3302,7 +3474,7 @@ function attachSheetHandlers(card, sheet, idx) {
         return;
       }
       if (btn.dataset.sheetAction === 'add-move') {
-        s.moves.push({ name: '', desc: '' });
+        s.moves.push({ name: '', number: 0, desc: '' });
       } else if (btn.dataset.sheetAction === 'remove-move') {
         const moveIndex = Number(btn.dataset.row);
         if (!Number.isInteger(moveIndex) || moveIndex < 0 || moveIndex >= s.moves.length) return;
