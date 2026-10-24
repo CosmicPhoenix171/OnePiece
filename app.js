@@ -3674,9 +3674,11 @@ function renderSheetHtml(pc, idx) {
       </div>
       <section class="digital-sheet-section digital-bounty-section">
         <h3>Bounty</h3>
-        <label class="digital-bounty-field">Bounty (Berries)
-          <input type="number" min="0" step="1" data-sheet-path="bounty" value="${esc(pc.bounty)}"${disabled} />
+        <label class="digital-bounty-field">
+          <span>Total Reward · Berries</span>
+          <input type="number" min="0" step="1" data-sheet-path="bounty" value="${esc(pc.bounty)}" aria-label="Bounty in berries"${disabled} />
         </label>
+        <span class="digital-bounty-stamp" aria-hidden="true">WANTED</span>
       </section>
     </div>
     <div class="muted updated-meta">${sheetMetaText(pc)}</div>

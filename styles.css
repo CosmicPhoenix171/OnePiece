@@ -1406,13 +1406,78 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   background: var(--rust);
   box-shadow: 0 0 0 4px rgba(176,74,42,0.12);
 }
-.digital-bounty-section { grid-column: 1 / -1; }
+.digital-bounty-section {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 2fr) 64px;
+  align-items: center;
+  gap: 12px 18px;
+  grid-column: 1 / -1;
+  padding: 14px 20px;
+  border-color: rgba(245,199,90,0.72);
+  background:
+    radial-gradient(circle at 90% 50%, rgba(245,199,90,0.13), transparent 18%),
+    linear-gradient(110deg, #081a29, #143247 62%, #1d4052);
+  box-shadow: 0 7px 18px rgba(4,18,27,0.2), inset 0 1px rgba(255,255,255,0.12);
+}
+.digital-bounty-section h3 {
+  grid-column: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: #fff1d0;
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+}
+.digital-bounty-section h3::before {
+  background: var(--gold-bright);
+  box-shadow: 0 0 0 4px rgba(245,199,90,0.14);
+}
+.digital-bounty-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--gold-bright);
+  font-size: 0.72rem;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.digital-bounty-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 14px;
+  border: 2px solid rgba(245,199,90,0.7);
+  border-radius: 9px;
+  background: linear-gradient(145deg, #fff8e5, #ead7a8);
+  box-shadow: inset 0 2px 5px rgba(57,39,13,0.12), 0 3px 9px rgba(0,0,0,0.16);
+  color: #42270d;
+  font-size: clamp(1.25rem, 2.2vw, 1.8rem);
+  font-weight: bold;
+  letter-spacing: 0.04em;
+}
+.digital-bounty-stamp {
+  display: grid;
+  grid-column: 3;
+  grid-row: 1;
+  place-items: center;
+  width: 64px;
+  aspect-ratio: 1;
+  border: 2px solid rgba(245,199,90,0.78);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px rgba(245,199,90,0.12);
+  color: #f5c75a;
+  font-size: 0.62rem;
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  transform: rotate(9deg);
+}
 .digital-flashback-section {
   border-color: rgba(138,106,31,0.62);
   background: linear-gradient(115deg, #f4e4bc, #fff5d8 55%, #ecd9a7);
 }
-.digital-bounty-field { display: grid; gap: 6px; }
-.digital-bounty-field input { width: 100%; }
 .digital-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1805,6 +1870,20 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   .digital-sheet-portrait { width: 78px; height: 96px; }
   .digital-sheet-content { gap: 10px; padding: 11px; }
   .digital-sheet-column { gap: 10px; }
+  .digital-bounty-section {
+    grid-template-columns: minmax(0, 1fr) 56px;
+    gap: 9px 12px;
+    padding: 13px;
+  }
+  .digital-bounty-section h3 { font-size: 1rem; }
+  .digital-bounty-field {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .digital-bounty-field input { min-height: 48px; }
+  .digital-bounty-stamp { grid-column: 2; grid-row: 1; width: 56px; font-size: 0.55rem; }
   .digital-sheet-section { padding: 13px; }
   .digital-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .digital-skill-grid { grid-template-columns: minmax(0, 1fr); }
