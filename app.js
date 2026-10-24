@@ -3101,6 +3101,7 @@ function ensureOwnSheet() {
 
 function addPlayerSheet() {
   if (!requireUsername()) return;
+  if (!confirm('Are you sure you want to add a new character sheet?')) return;
   const sheet = makeEmptySheet();
   sheet.player = currentUsername;
   if (currentUsername) sheet.name = currentUsername;
