@@ -25,6 +25,7 @@
   const params = new URLSearchParams(location.search);
   const sessionId = (params.get('session') || window.FIREBASE_SESSION || 'default')
     .replace(/[.#$\[\]\/]/g, '_');
+  const liveStatus = sessionId === 'default' ? 'live' : 'live · ' + sessionId;
   const writerId = Math.random().toString(36).slice(2, 10);
 
   let ref;
@@ -152,7 +153,7 @@
           })))
           .then(() => ref.update({ _writerId: writerId, _ts: timestamp }))
           .then(() => {
-            setStatus('connected', 'live · ' + sessionId);
+            setStatus('connected', liveStatus);
             resolvers.forEach((settle) => settle(true));
           })
           .catch((err) => {
@@ -180,7 +181,7 @@
         state: nextState
       };
     }).then(() => {
-      setStatus('connected', 'live · ' + sessionId);
+      setStatus('connected', liveStatus);
       return true;
     }).catch((err) => {
       console.error('[sync] log book sync failed:', err);
@@ -206,7 +207,7 @@
           }))
           .catch((err) => console.error('[sync] seed failed:', err));
       }
-      setStatus('connected', 'live · ' + sessionId);
+      setStatus('connected', liveStatus);
       receivedInitial = true;
       return;
     }
@@ -214,14 +215,14 @@
     const remoteState = envelope ? envelope.state : v;
     if (envelope?._writerId === writerId) {
       // Echo of our own write — ignore.
-      setStatus('connected', 'live · ' + sessionId);
+      setStatus('connected', liveStatus);
       receivedInitial = true;
       return;
     }
     if (typeof window.applyRemoteState === 'function' && remoteState) {
       window.applyRemoteState(remoteState, { initial: !receivedInitial });
     }
-    setStatus('connected', 'live · ' + sessionId);
+    setStatus('connected', liveStatus);
     receivedInitial = true;
   }, (err) => {
     console.error('[sync] read error:', err);

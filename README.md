@@ -43,7 +43,7 @@ Optional. When enabled, all players (and the DM) who open the same URL with the 
 2. Build → Realtime Database → Create database (start in test mode while playing).
 3. Project Settings → Your apps → Web app → copy the config.
 4. Paste the values into `firebase-config.js` (in this folder).
-5. Reload `index.html` — the badge in the tab bar turns green (`live · default`).
+5. Reload `index.html` — the badge in the tab bar turns green (`live`).
 6. Share the URL plus `?session=YOUR-CREW` to play together.
 
 Leave `apiKey` empty in `firebase-config.js` to keep the app local-only (default). The local `localStorage` save still works either way.
