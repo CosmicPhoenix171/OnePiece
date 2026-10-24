@@ -289,8 +289,6 @@
   <!-- PLAYER SHEETS -->
   <section class="panel" id="tab-characters">
     <div class="parchment">
-      <h2>Player Sheets</h2>
-      <p class="muted">Digital character sheets save automatically and sync with your campaign.</p>
       <div class="btn-row">
         <button class="gold" data-action="addPlayerSheet">+ Add Character Sheet</button>
       </div>
@@ -301,13 +299,8 @@
   <!-- SHARED COMBAT TRACKER -->
   <section class="panel" id="tab-combat">
     <div class="parchment combat-board">
-      <div class="combat-header">
-        <div>
-          <h2>Active Encounter</h2>
-          <p class="muted">Enemies are above the crew. Owners and the GM can open crew sheets or use Quick HP; character owners can tap INIT to roll d20 + Dexterity.</p>
-          <p class="muted combat-targeting-hint" data-gm-only hidden>Drag the ◎ handle from one combatant to another to show targeting. Drag the same link again to remove it.</p>
-        </div>
-        <div class="combat-actions" data-gm-only hidden>
+      <div class="combat-header" data-gm-only hidden>
+        <div class="combat-actions">
           <button type="button" id="combat-start" class="gold">Start Combat</button>
           <button type="button" id="combat-end" class="danger" disabled>End Combat</button>
         </div>
