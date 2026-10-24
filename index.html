@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2" />
 <link rel="manifest" href="manifest.webmanifest?v=2" />
 <link rel="apple-touch-icon" sizes="180x180" href="assets/icon-180.png?v=2" />
-<link rel="stylesheet" href="styles.css?v=78" />
+<link rel="stylesheet" href="styles.css?v=90" />
 </head>
 <body>
 <div id="app-startup-splash" class="app-startup-splash" role="status" aria-label="Loading The Devil's Ransom">
@@ -305,6 +305,7 @@
         <div>
           <h2>Active Encounter</h2>
           <p class="muted">Enemies are above the crew. Owners and the GM can open crew sheets or use Quick HP; character owners can tap INIT to roll d20 + Dexterity.</p>
+          <p class="muted combat-targeting-hint" data-gm-only hidden>Drag the ◎ handle from one combatant to another to show targeting. Drag the same link again to remove it.</p>
         </div>
         <div class="combat-actions" data-gm-only hidden>
           <button type="button" id="combat-start" class="gold">Start Combat</button>
@@ -384,7 +385,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="firebase-config.js"></script>
-<script src="app.js?v=105"></script>
+<script src="app.js?v=118"></script>
 <script src="map.js?v=10"></script>
 <script src="sync.js?v=7"></script>
 </body>
