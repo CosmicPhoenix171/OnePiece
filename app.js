@@ -99,6 +99,7 @@ function save() {
 
 let __applyingRemote = false;
 let __pendingSheetMigrationSync = false;
+let __pendingNpcMigrationSync = false;
 const __pendingLogBooks = new Set();
 
 function logBookOwnerKey(username, notes = state.playerNotes) {
@@ -163,8 +164,9 @@ function applyRemoteState(remote, options = {}) {
   } finally {
     __applyingRemote = false;
   }
-  if (__pendingSheetMigrationSync) {
+  if (__pendingSheetMigrationSync || __pendingNpcMigrationSync) {
     __pendingSheetMigrationSync = false;
+    __pendingNpcMigrationSync = false;
     save();
   }
 }
@@ -237,7 +239,12 @@ function updateGmOnlyUI() {
 
 function updateLoginUI() {
   const label = $('#current-user-label');
-  if (label) label.textContent = `User: ${currentUsername || 'Guest'}`;
+  if (label) {
+    label.textContent = currentUsername || 'Guest';
+    label.disabled = !currentUsername;
+    label.title = currentUsername ? `Log out ${currentUsername}` : 'No player is logged in';
+    label.setAttribute('aria-label', currentUsername ? `Log out ${currentUsername}` : 'No player is logged in');
+  }
 
   const overlay = $('#login-overlay');
   if (overlay) overlay.classList.toggle('hidden', Boolean(currentUsername));
@@ -430,11 +437,7 @@ document.addEventListener('click', e => {
         renderRollLog();
       }
       break;
-    case 'switchUser':
-      if (confirm('Switch username? You can type a new one in the login box.')) {
-        setUsername('');
-      }
-      break;
+    case 'logout':       if (currentUsername) setUsername(''); break;
     case 'exportAll':      exportSave(); break;
     case 'importAll':      importSave(); break;
     case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } break;
@@ -746,8 +749,63 @@ const NPC_STAT_BLOCKS = [
   { name: 'Devil Fruit Adept', role: 'Unpredictable specialist', tier: 'Elite', ac: 15, hp: 300, speed: 30, stats: [12, 17, 16, 16, 14, 17], attacks: ['Fruit Technique +7 · 4d10 thematic damage', 'Environmental Shift · DC 15 save or controlled'], traits: ['Strange Body: Resistance to one physical damage type.', 'Sea Weakness: Incapacitated while substantially submerged.'] },
   { name: 'Sea King Juvenile', role: 'Aquatic monster', tier: 'Boss', ac: 16, hp: 480, speed: 10, stats: [23, 12, 21, 5, 14, 8], attacks: ['Bite +9 · 5d10+6 piercing', 'Tail Sweep · 4d8+6, DC 16 STR or prone'], traits: ['Siege Monster: Double damage to ships and structures.', 'Submerge: Cannot be targeted from deck until it surfaces.'] },
   { name: 'Cipher Agent', role: 'Assassin', tier: 'Boss', ac: 19, hp: 420, speed: 45, stats: [18, 22, 18, 17, 18, 16], attacks: ['Finger Pistol +10 · 4d10+6 piercing', 'Tempest Kick · 4d8 slashing in a 30-ft. line'], traits: ['Six Powers: Dash, disengage, or parry as a bonus action.', 'Evasion: No damage on successful DEX saves.'] },
-  { name: 'Vice Admiral', role: 'Campaign threat', tier: 'Legendary', ac: 21, hp: 650, speed: 40, stats: [24, 20, 23, 18, 21, 20], attacks: ['Haki Strike +12 · 6d10+7 force', 'Conqueror\'s Presence · DC 19 WIS or stunned'], traits: ['Armament Haki: Attacks ignore physical resistance.', 'Legendary Resolve: Succeed on three failed saves.'] }
+  { name: 'Vice Admiral', role: 'Campaign threat', tier: 'Legendary', ac: 21, hp: 650, speed: 40, stats: [24, 20, 23, 18, 21, 20], attacks: ['Haki Strike +12 · 6d10+7 force', 'Conqueror\'s Presence · DC 19 WIS or stunned'], traits: ['Armament Haki: Attacks ignore physical resistance.', 'Legendary Resolve: Succeed on three failed saves.'] },
+  { name: 'Harbor Lookout', role: 'Alarm runner', tier: 'Minion', ac: 12, hp: 28, speed: 35, stats: [9, 15, 10, 11, 13, 10], attacks: ['Signal Flare · Marks a target for nearby allies', 'Knife +3 · 1d4+1 piercing'], traits: ['Crow’s Nest View: Spots ships and movement from far away.', 'Quick Escape: Disengages as a bonus action.'] },
+  { name: 'Tideway Deckhand', role: 'Shipboard support', tier: 'Minion', ac: 12, hp: 42, speed: 30, stats: [12, 13, 12, 10, 12, 10], attacks: ['Belaying Pin +3 · 1d6+1 bludgeoning', 'Rope Snare · DC 11 DEX or restrained'], traits: ['Sure Footing: Ignores difficult terrain caused by a moving deck.'] },
+  { name: 'Smuggler Sapper', role: 'Demolitions expert', tier: 'Standard', ac: 13, hp: 95, speed: 30, stats: [12, 15, 14, 16, 12, 11], attacks: ['Powder Charge +5 · 3d8 fire in a 10-ft. burst', 'Short Blade +4 · 1d6+2 piercing'], traits: ['Prepared Escape: Can create smoke and move 15 ft. once per encounter.', 'Volatile Pack: A critical hit forces a DC 13 DEX save or drops an explosive.'] },
+  { name: 'Gale Coast Navigator', role: 'Wind-reading tactician', tier: 'Standard', ac: 14, hp: 115, speed: 35, stats: [10, 16, 13, 15, 16, 13], attacks: ['Compass Dart +5 · 1d8+3 piercing', 'Crosswind Feint · DC 13 WIS or the target has disadvantage on its next attack'], traits: ['Read the Weather: Warns allies of an incoming hazard.', 'Charted Route: Nearby allies ignore difficult terrain on their next move.'] },
+  { name: 'Pearlreef Guardian', role: 'Reef gatekeeper', tier: 'Elite', ac: 17, hp: 260, speed: 30, stats: [19, 12, 18, 10, 15, 12], attacks: ['Coral Maul +7 · 3d8+4 bludgeoning', 'Undertow Pull · DC 15 STR or dragged 15 ft.'], traits: ['Brine-Blessed: Breathes underwater and swims at full speed.', 'Reef Shelter: Gains half cover while touching stone or coral.'] },
+  { name: 'Stormglass Duelist', role: 'Rival blade master', tier: 'Elite', ac: 18, hp: 230, speed: 40, stats: [14, 20, 15, 14, 16, 16], attacks: ['Twin Sabers +8 · 3d6+5 slashing', 'Flash Step · Moves 20 ft. and makes one saber attack'], traits: ['Riposte: Once per round, counterattacks a missed melee strike.', 'Dramatic Entrance: The first attack against the duelist has disadvantage.'] },
+  { name: 'Free-Captain Vexa Rook', role: 'Rival ship commander', tier: 'Boss', ac: 18, hp: 390, speed: 35, stats: [17, 18, 17, 15, 16, 19], attacks: ['Blackwake Cutlass +9 · 4d8+5 slashing', 'Rallying Order · One ally moves and attacks'], traits: ['Never Surrenders: Gains 25 temporary HP the first time she falls below half HP.', 'Crew First: Redirects one hit from an adjacent ally each round.'] },
+  { name: 'The Drowned Bell', role: 'Haunting sea spirit', tier: 'Boss', ac: 17, hp: 360, speed: 20, stats: [16, 14, 18, 13, 18, 17], attacks: ['Echoing Toll +8 · 4d8 thunder', 'Sinking Note · DC 15 CON or speed becomes 0 until next turn'], traits: ['Mist Form: Can move through creatures and narrow gaps.', 'Deepwater Lure: Pulls one creature 10 ft. closer on a failed WIS save.'] },
+  { name: 'Tempest Corsair Lord', role: 'Fleet raider', tier: 'Legendary', ac: 20, hp: 590, speed: 40, stats: [21, 20, 21, 17, 19, 20], attacks: ['Thunderhead Saber +11 · 5d8+6 slashing', 'Squall Burst · 5d10 lightning in a 20-ft. radius'], traits: ['Stormstride: Moves through rain and wind without penalty.', 'Fleet Command: Two allies may move up to half speed after the corsair acts.'] },
+  { name: 'Trenchback Leviathan', role: 'Ancient sea beast', tier: 'Legendary', ac: 19, hp: 720, speed: 20, stats: [26, 10, 25, 4, 16, 8], attacks: ['Crushing Bite +12 · 6d10+8 piercing', 'Hullbreaker Roll · 6d8+8 bludgeoning against creatures and ships'], traits: ['Colossal: Occupies a 30-ft. space and can carry creatures on its back.', 'Undertow: When it dives, nearby creatures must pass a DC 18 STR save or be pulled underwater.'] }
 ];
+
+const NPC_TIER_HIT_POINTS = {
+  Minion: 50,
+  Standard: 100,
+  Elite: 150,
+  Boss: 200,
+  Legendary: 250,
+};
+const NPC_COMBAT_RULES_VERSION = 2;
+
+function npcMaximumHp(npc) {
+  return NPC_TIER_HIT_POINTS[npc.tier] || NPC_TIER_HIT_POINTS.Standard;
+}
+
+function npcArmorClass(npc) {
+  const dexterity = Number(npc.stats?.[1]);
+  const constitution = Number(npc.stats?.[2]);
+  const dexScore = Number.isFinite(dexterity) ? dexterity : 10;
+  const conScore = Number.isFinite(constitution) ? constitution : 10;
+  const explicitBase = Number(npc.armorBaseAc);
+  // Convert legacy D&D-style AC into its armor base, then use the player-sheet score formula.
+  const baseAc = Number.isFinite(explicitBase)
+    ? Math.max(0, explicitBase)
+    : Math.max(0, (Number(npc.ac) || 10) - statMod(dexScore));
+  return baseAc + Math.max(dexScore, conScore);
+}
+
+function migrateNpcEncounterCombatStats() {
+  if (!Array.isArray(state.npcEncounter)) return false;
+  let changed = false;
+  for (const combatant of state.npcEncounter) {
+    if (!combatant || combatant.combatRulesVersion === NPC_COMBAT_RULES_VERSION) continue;
+    const template = NPC_STAT_BLOCKS.find((npc) => npc.name === combatant.templateName);
+    if (!template) continue;
+    const oldMaxHp = Math.max(1, Number(combatant.maxHp) || npcMaximumHp(template));
+    const oldHp = clamp(Number(combatant.hp) || 0, 0, oldMaxHp);
+    const newMaxHp = npcMaximumHp(template);
+    combatant.hp = oldHp === 0 ? 0 : Math.max(1, Math.round(oldHp / oldMaxHp * newMaxHp));
+    combatant.maxHp = newMaxHp;
+    combatant.ac = npcArmorClass(template);
+    combatant.combatRulesVersion = NPC_COMBAT_RULES_VERSION;
+    changed = true;
+  }
+  return changed;
+}
 
 function npcModifier(score) {
   const modifier = statMod(score);
@@ -758,7 +816,7 @@ function npcCardHtml(npc) {
   const abilities = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
   return `<article class="npc-stat-card" data-npc-search="${esc(JSON.stringify(npc).toLowerCase())}">
     <header><div><h3>${esc(npc.name)}</h3><p>${esc(npc.role)}</p></div><span>${esc(npc.tier)}</span></header>
-    <div class="npc-vitals"><b>AC ${npc.ac}</b><b>HP ${npc.hp}</b><b>Speed ${npc.speed} ft.</b></div>
+    <div class="npc-vitals"><b>AC ${npcArmorClass(npc)}</b><b>HP ${npcMaximumHp(npc)}</b><b>Speed ${npc.speed} ft.</b></div>
     <div class="npc-abilities">${abilities.map((ability, index) => `<div><b>${ability}</b><span>${npc.stats[index]} (${npcModifier(npc.stats[index])})</span></div>`).join('')}</div>
     <section><h4>Actions</h4>${npc.attacks.map((attack) => `<p>${esc(attack)}</p>`).join('')}</section>
     <section><h4>Traits</h4>${npc.traits.map((trait) => `<p>${esc(trait)}</p>`).join('')}</section>
@@ -782,10 +840,11 @@ function addNpcToEncounter(templateName) {
     templateName: npc.name,
     name,
     tier: npc.tier,
-    ac: npc.ac,
+    ac: npcArmorClass(npc),
     initiative,
-    maxHp: npc.hp,
-    hp: npc.hp
+    maxHp: npcMaximumHp(npc),
+    hp: npcMaximumHp(npc),
+    combatRulesVersion: NPC_COMBAT_RULES_VERSION
   });
   recordRoll({
     character: name,
@@ -817,13 +876,11 @@ function npcEncounterCardHtml(combatant) {
     <div class="npc-hp-summary"><strong>${hp} / ${maxHp} HP</strong><span>${hp === 0 ? 'Defeated' : `${Math.round(percent)}%`}</span></div>
     <div class="npc-hp-bar"><div style="width:${percent}%"></div></div>
     <div class="npc-hp-controls">
-      <button type="button" data-hp-delta="-10">−10</button>
-      <button type="button" data-hp-delta="-5">−5</button>
-      <button type="button" data-hp-delta="-1">−1</button>
-      <input type="number" min="0" max="${maxHp}" value="${hp}" data-combatant-hp aria-label="Current HP for ${esc(combatant.name)}" />
-      <button type="button" data-hp-delta="1">+1</button>
-      <button type="button" data-hp-delta="5">+5</button>
-      <button type="button" data-hp-delta="10">+10</button>
+      <label>Damage / Heal
+        <input type="number" min="1" step="1" value="1" data-combat-hp-amount required aria-label="HP adjustment amount for ${esc(combatant.name)}" />
+      </label>
+      <button type="button" data-combat-hp-action="damage" aria-label="Apply damage to ${esc(combatant.name)}">− Damage</button>
+      <button type="button" data-combat-hp-action="heal" aria-label="Heal ${esc(combatant.name)}">+ Heal</button>
     </div>
   </article>`;
 }
@@ -869,24 +926,27 @@ function initNpcTab() {
     if (!card) return;
     const index = state.npcEncounter.findIndex((entry) => entry.id === card.dataset.combatantId);
     if (index < 0) return;
+    let hpResult = null;
     if (event.target.closest('[data-remove-combatant]')) {
       state.npcEncounter.splice(index, 1);
     } else {
-      const deltaButton = event.target.closest('[data-hp-delta]');
-      if (!deltaButton) return;
+      const hpButton = event.target.closest('[data-combat-hp-action]');
+      if (!hpButton) return;
       const combatant = state.npcEncounter[index];
-      combatant.hp = clamp((Number(combatant.hp) || 0) + Number(deltaButton.dataset.hpDelta), 0, Number(combatant.maxHp) || 1);
+      const amount = readQuickHpAmount(card.querySelector('[data-combat-hp-amount]'));
+      if (amount === null) return;
+      const direction = hpButton.dataset.combatHpAction === 'damage' ? -1 : 1;
+      hpResult = applyQuickHpAdjustment(combatant, amount, direction, Number(combatant.ac) || 0);
     }
     save();
     renderNpcEncounter();
+    if (hpResult) showHpChangeToast(hpResult.message, hpResult.changeType);
   });
   $('#npc-encounter-list')?.addEventListener('change', (event) => {
+    if (!event.target.matches('[data-combatant-name], [data-combatant-initiative]')) return;
     const card = event.target.closest('[data-combatant-id]');
     const combatant = state.npcEncounter.find((entry) => entry.id === card?.dataset.combatantId);
     if (!combatant) return;
-    if (event.target.matches('[data-combatant-hp]')) {
-      combatant.hp = clamp(Number(event.target.value) || 0, 0, Number(combatant.maxHp) || 1);
-    }
     if (event.target.matches('[data-combatant-name]')) {
       combatant.name = String(event.target.value || combatant.templateName).trim().slice(0, 50) || combatant.templateName;
     }
@@ -961,13 +1021,13 @@ function getCombatTurn() {
 function combatantCardHtml(combatant, turn) {
   const percent = clamp((combatant.hp / combatant.maxHp) * 100, 0, 100);
   const healthLevel = percent > 50 ? 'full' : percent > 25 ? 'half' : 'quarter';
-  const showExactHp = isGmUser();
+  const showExactHp = isGmUser() || (combatant.type === 'player' && combatant.canOpenSheet);
+  const barPercent = showExactHp ? percent : 100;
   const healthLabel = showExactHp
     ? `Health: ${combatant.hp} of ${combatant.maxHp}`
     : `Health: ${healthLevel}`;
   const isActive = turn.started && turn.activeId === combatant.id && combatant.hp > 0 && combatant.enabled;
   const defeated = combatant.hp <= 0;
-  const sidelined = combatant.type === 'player' && !combatant.enabled;
   const initiative = combatant.canRollInitiative
     ? `<button type="button" class="combatant-initiative combatant-initiative-roll" data-roll-initiative="${esc(combatant.id)}" aria-label="Roll initiative for ${esc(combatant.name)}" title="Roll d20 + Dexterity modifier"><span>INIT</span><b>${combatant.initiative}</b></button>`
     : `<span class="combatant-initiative"><span>INIT</span><b>${combatant.initiative}</b></span>`;
@@ -977,7 +1037,7 @@ function combatantCardHtml(combatant, turn) {
   const portrait = combatant.type === 'player' && combatant.canOpenSheet
     ? `<button type="button" class="combatant-portrait-button" data-open-player-sheet="${esc(combatant.id)}" aria-label="Open ${esc(combatant.name)}'s character sheet" title="Open character sheet">${avatar}</button>`
     : avatar;
-  return `<article class="combatant-card ${combatant.type === 'player' ? 'crew-combatant' : 'opponent-combatant'}${isActive ? ' active-turn' : ''}${defeated ? ' defeated' : ''}${sidelined ? ' not-in-encounter' : ''}" data-combatant-id="${esc(combatant.id)}">
+  return `<article class="combatant-card ${combatant.type === 'player' ? 'crew-combatant' : 'opponent-combatant'}${isActive ? ' active-turn' : ''}${defeated ? ' defeated' : ''}" data-combatant-id="${esc(combatant.id)}">
     ${isActive ? '<div class="combatant-turn-banner">⚔ CURRENT TURN ⚔</div>' : ''}
     <div class="combatant-card-heading">
       ${portrait}
@@ -989,12 +1049,12 @@ function combatantCardHtml(combatant, turn) {
       ${initiative}
     </div>
     ${combatant.type === 'player' && isGmUser()
-      ? `<button type="button" class="combatant-participation${sidelined ? ' sidelined' : ''}" data-toggle-crew="${esc(combatant.id)}" aria-label="${sidelined ? 'Add' : 'Remove'} ${esc(combatant.name)} ${sidelined ? 'to' : 'from'} encounter">${sidelined ? 'Add to Encounter' : 'Remove from Encounter'}</button>`
+      ? `<button type="button" class="combatant-participation" data-toggle-crew="${esc(combatant.id)}" aria-label="Remove ${esc(combatant.name)} from combat">Remove from Combat</button>`
       : ''}
     <div class="combatant-vitals">
       ${showExactHp ? `<span><small>HP</small><b>${combatant.hp} / ${combatant.maxHp}</b></span>` : ''}
       <span><small>AC</small><b>${combatant.ac}</b></span>
-      <strong class="combatant-status">${defeated ? 'Defeated' : sidelined ? 'Sidelined' : isActive ? 'Current Turn' : 'Ready'}</strong>
+      <strong class="combatant-status">${defeated ? 'Defeated' : isActive ? 'Current Turn' : 'Ready'}</strong>
     </div>
     ${combatant.canAdjustHp ? `<div class="combatant-quick-hp">
       <label>Quick HP
@@ -1003,11 +1063,15 @@ function combatantCardHtml(combatant, turn) {
       <button type="button" data-combat-hp-action="damage" aria-label="Apply damage to ${esc(combatant.name)}">− Damage</button>
       <button type="button" data-combat-hp-action="heal" aria-label="Heal ${esc(combatant.name)}">+ Heal</button>
     </div>` : ''}
-    <div class="combatant-hp-bar" data-health-level="${healthLevel}" role="img" aria-label="${healthLabel}"><div style="width:${percent}%"></div></div>
+    <div class="combatant-hp-bar" data-health-level="${healthLevel}" role="img" aria-label="${healthLabel}"><div style="width:${barPercent}%"></div></div>
   </article>`;
 }
 
 function renderCombatEncounter() {
+  if (migrateNpcEncounterCombatStats()) {
+    if (__applyingRemote) __pendingNpcMigrationSync = true;
+    else save();
+  }
   const root = $('#combat-roster');
   if (!root) {
     renderCombatSheet();
@@ -1035,7 +1099,7 @@ function renderCombatEncounter() {
   if (countLabel) {
     const disabledCount = combatants.length - participating.length;
     countLabel.textContent = disabledCount
-      ? `${participating.length} included · ${disabledCount} sidelined`
+      ? `${participating.length} in combat · ${disabledCount} out of combat`
       : `${combatants.length} combatant${combatants.length === 1 ? '' : 's'}`;
   }
   const nextButton = $('#combat-next');
@@ -1051,9 +1115,22 @@ function renderCombatEncounter() {
   }
   const enemies = combatants.filter((combatant) => combatant.type === 'npc');
   const crew = combatants.filter((combatant) => combatant.type === 'player');
+  const activeCrew = crew.filter((combatant) => combatant.enabled);
+  const reserveCrew = crew.filter((combatant) => !combatant.enabled);
   const cards = (side) => side.length
     ? side.map((combatant) => combatantCardHtml(combatant, turn)).join('')
     : '<p class="combat-side-empty">No combatants in this line.</p>';
+  const reserveList = isGmUser() && reserveCrew.length
+    ? `<section class="combat-reserve-roster" aria-label="Crew out of combat">
+        <div class="combat-side-heading"><h3>Crew Out of Combat</h3><span>${reserveCrew.length}</span></div>
+        <div class="combat-reserve-list">${reserveCrew.map((combatant) => `
+          <div class="combat-reserve-member">
+            <span><strong>${esc(combatant.name)}</strong><small>${esc(combatant.owner)}</small></span>
+            <button type="button" class="combatant-participation" data-toggle-crew="${esc(combatant.id)}" aria-label="Add ${esc(combatant.name)} to combat">Add to Combat</button>
+          </div>`).join('')}
+        </div>
+      </section>`
+    : '';
   root.innerHTML = `
     <section class="combat-mat-side enemy-side" aria-label="Enemy side">
       <div class="combat-side-heading"><h3>Enemies</h3><span>${enemies.length}</span></div>
@@ -1061,9 +1138,10 @@ function renderCombatEncounter() {
     </section>
     <div class="combat-mat-divider" role="separator" aria-label="Divider between enemies and crew"><span>⚔ VS ⚔</span></div>
     <section class="combat-mat-side crew-side" aria-label="Crew side">
-      <div class="combat-side-heading"><h3>Crew</h3><span>${crew.length}</span></div>
-      <div class="combatant-row">${cards(crew)}</div>
-    </section>`;
+      <div class="combat-side-heading"><h3>Crew in Combat</h3><span>${activeCrew.length}</span></div>
+      <div class="combatant-row">${cards(activeCrew)}</div>
+    </section>
+    ${reserveList}`;
   renderCombatSheet();
 }
 
@@ -3240,7 +3318,7 @@ function renderSheetHtml(pc, idx) {
         <h3>Character</h3>
         <div class="digital-fields digital-fields-identity">
           ${field('Character Name', 'name', pc.name)}
-          ${field('Epithet', 'epithet', pc.epithet)}
+          ${field('Nickname', 'epithet', pc.epithet)}
           ${field('Crew Role', 'role', pc.role)}
           ${field('Age', 'age', pc.age)}
           ${field('Home Sea / Island', 'home', pc.home)}
@@ -4224,3 +4302,6 @@ initCombatTracker();
 renderSharedImages();
 renderTravel();
 renderShip();
+window.setTimeout(() => {
+  $('#app-startup-splash')?.classList.add('is-hidden');
+}, 550);

@@ -14,6 +14,7 @@ Enable Pages in the repository settings under **Pages**, choose the `main` branc
 All campaign data auto-saves to your browser's `localStorage`.
 
 For best results, keep the same browser/profile so the local save stays available.
+The installed app uses the campaign logo for its launcher icon and startup screen; the wide logo is also used in the page header.
 
 ## Tabs
 
@@ -21,7 +22,8 @@ For best results, keep the same browser/profile so the local save stays availabl
 2. **Ship Tracker** — Hull and sails condition, fire/water damage, class-based cargo capacity, supplies, and a damage/event log.
 3. **Player Sheets** — Fully digital, autosaving character sheets with identity and bounty in berries, abilities and skills that can be clicked to roll while locked or edited while unlocked, combat and health tracking, editable signature moves, flashback charges, inventory, and Devil's Ransom details. Armor Class is calculated as armor base AC plus the higher full Constitution or Dexterity score (base 10 when unarmored).
 4. **Combat** — A shared duel-mat battlefield with enemies above the center divider and crew below. Cards are sorted by initiative within each side, and the active combatant pulses with a highlighted turn banner. Crew portraits open the character sheet inline below the duel mat for the owner and GM. Card Quick HP controls let owners adjust their own characters while the GM can adjust any combatant. The GM advances turns from beside the round display, controls combat, and can include or sideline each crew member; character owners can click their INIT badge to roll d20 + Dexterity and sync the result.
-5. **Log Book** — Each player gets a private notes area that auto-saves and syncs with the GM. Below it, the GM also sees the encounter archive (saved encounter records with status, notes, and export controls).
+5. **NPCs** — GM-only stat-block roster and encounter tracker. NPC AC uses the player-sheet armor-base-plus-higher-DEX-or-CON formula, and maximum HP is set by tier (50 Minion, 100 Standard, 150 Elite, 200 Boss, 250 Legendary). Damage is reduced by AC before HP is lost.
+6. **Log Book** — Each player gets a private notes area that auto-saves and syncs with the GM. Below it, the GM also sees the encounter archive (saved encounter records with status, notes, and export controls).
 
 ## Simple login (username only)
 

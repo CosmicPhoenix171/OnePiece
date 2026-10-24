@@ -16,7 +16,7 @@ const MAP_WIDTH = 1000;
 const MAP_HEIGHT = 600;
 const MAP_REPEAT_COUNT = 3;
 const MAP_CANVAS_WIDTH = MAP_WIDTH * MAP_REPEAT_COUNT;
-const MAP_MIN_ZOOM = 0.5;
+const MAP_MIN_ZOOM = 0.1;
 const MAP_MAX_ZOOM = 8;
 const FOG_RADIUS = 55;
 const FOG_OPACITY = 1;
@@ -27,6 +27,8 @@ let mapPanState = null;
 let mapImageReady = false;
 let mapSuppressPlacement = false;
 let lastMarkerZoom = null;
+let lastMapViewportWidth = 0;
+let lastMapViewportHeight = 0;
 
 function isGmUser() {
   return typeof currentUsername === 'string'
@@ -103,7 +105,7 @@ function renderMapView() {
   const label = $('#map-zoom-label');
   if (label) label.textContent = `${Math.round(state.mapView.zoom * 100)}%`;
   const picker = $('#map-zoom-picker');
-  if (picker) picker.value = String(Math.round(state.mapView.zoom * 100 / 25) * 25);
+  if (picker) picker.value = String(Math.round(state.mapView.zoom * 100 / 5) * 5);
 }
 
 function fitMapToViewport(saveState = true) {
@@ -117,8 +119,21 @@ function fitMapToViewport(saveState = true) {
   );
   state.mapView.panX = Math.round((viewport.clientWidth - MAP_CANVAS_WIDTH * state.mapView.zoom) / 2);
   state.mapView.panY = Math.round((viewport.clientHeight - MAP_HEIGHT * state.mapView.zoom) / 2);
+  lastMapViewportWidth = viewport.clientWidth;
+  lastMapViewportHeight = viewport.clientHeight;
   renderMapView();
   if (saveState) save();
+}
+
+function fitMapIfViewportChanged() {
+  if (!mapIsVisible()) return;
+  const viewport = getViewport();
+  if (!viewport?.clientWidth || !viewport.clientHeight) return;
+  if (viewport.clientWidth === lastMapViewportWidth && viewport.clientHeight === lastMapViewportHeight) {
+    renderMapView();
+    return;
+  }
+  fitMapToViewport(false);
 }
 
 function setMapZoom(nextZoom, anchorX, anchorY) {
@@ -293,15 +308,9 @@ function centerOnShip() {
 function bindMapControls() {
   const viewport = getViewport();
   const svg = $('#map-svg');
-  const zoomIn = $('#map-zoom-in');
   const zoomPicker = $('#map-zoom-picker');
-  if (!viewport || !svg || zoomIn?.dataset.bound === 'true') return;
-  $('#map-zoom-out').dataset.bound = 'true';
-  $('#map-zoom-fit').dataset.bound = 'true';
-  zoomIn.dataset.bound = 'true';
-  zoomIn.addEventListener('click', () => setMapZoom(state.mapView.zoom * 1.2));
-  $('#map-zoom-out').addEventListener('click', () => setMapZoom(state.mapView.zoom / 1.2));
-  $('#map-zoom-fit').addEventListener('click', () => fitMapToViewport());
+  if (!viewport || !svg || viewport.dataset.controlsBound === 'true') return;
+  viewport.dataset.controlsBound = 'true';
   zoomPicker?.addEventListener('input', () => setMapZoom(Number(zoomPicker.value) / 100));
 
   viewport.addEventListener('wheel', (event) => {
@@ -386,9 +395,11 @@ function bindMapControls() {
     renderMapMarkers();
   });
 
-  window.addEventListener('resize', () => {
-    if (mapIsVisible()) renderMapView();
-  });
+  window.addEventListener('resize', fitMapIfViewportChanged);
+  if (typeof ResizeObserver === 'function') {
+    const mapResizeObserver = new ResizeObserver(fitMapIfViewportChanged);
+    mapResizeObserver.observe(viewport);
+  }
 }
 
 function initMap() {
@@ -399,7 +410,7 @@ function initMap() {
   const mapTab = $('#tabs .tab[data-tab="map"]');
   if (mapTab && mapTab.dataset.mapBound !== 'true') {
     mapTab.dataset.mapBound = 'true';
-    mapTab.addEventListener('click', () => requestAnimationFrame(() => renderMapView()));
+    mapTab.addEventListener('click', () => requestAnimationFrame(fitMapIfViewportChanged));
   }
 }
 
