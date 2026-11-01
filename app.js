@@ -3785,25 +3785,28 @@ function attachSheetHandlers(card, sheet, idx) {
       const skillKey = button.dataset.rollSkill;
       let label;
       let modifier;
+      let sides;
       if (abilityKey) {
         const ability = STAT_DEFS.find((stat) => stat.key === abilityKey);
         if (!ability) return;
         label = `${ability.label} Check`;
-        modifier = statMod(s.stats[ability.key]);
+        modifier = Number(s.stats[ability.key]) || 0;
+        sides = 100;
       } else {
         const skill = SKILL_DEFS.find((definition) => definition.key === skillKey);
         if (!skill) return;
         label = `${skill.label} Check`;
         modifier = skillModifier(s, skill);
+        sides = 20;
       }
 
-      const { die, rolls } = rollPlayerDice(20);
+      const { die, rolls } = rollPlayerDice(sides);
       const total = die + modifier;
       const detail = rolls.length > 1
         ? `${rolls.join(', ')} → kept ${die}; ${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} = ${total}`
         : `${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} = ${total}`;
-      recordRoll({ character: s.name || s.player, label, sides: 20, die, rolls, modifier, total, detail });
-      showDiceRoll({ sides: 20, die, rolls, modifier, total, label, rollDetail: detail });
+      recordRoll({ character: s.name || s.player, label, sides, die, rolls, modifier, total, detail });
+      showDiceRoll({ sides, die, rolls, modifier, total, label, rollDetail: detail });
     });
   });
 
