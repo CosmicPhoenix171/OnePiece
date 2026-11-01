@@ -773,13 +773,18 @@ const NPC_STAT_BLOCKS = [
 const NPC_TIER_HIT_POINTS = {
   Minion: 50,
   Standard: 100,
-  Elite: 150,
-  Boss: 200,
-  Legendary: 250,
+  Elite: 200,
+  Boss: 300,
 };
-const NPC_COMBAT_RULES_VERSION = 2;
+const NPC_COMBAT_RULES_VERSION = 3;
 
 function npcMaximumHp(npc) {
+  if (npc.tier === 'Legendary') {
+    const activePlayers = Math.max(1, (Array.isArray(state.playerSheets) ? state.playerSheets : [])
+      .filter((sheet) => sheet && sheet.combatEnabled !== false).length);
+    const ransomPieces = Math.max(0, Number(state.piecesHeld) || 0);
+    return activePlayers * (100 + 10 * ransomPieces);
+  }
   return NPC_TIER_HIT_POINTS[npc.tier] || NPC_TIER_HIT_POINTS.Standard;
 }
 
@@ -800,12 +805,15 @@ function migrateNpcEncounterCombatStats() {
   if (!Array.isArray(state.npcEncounter)) return false;
   let changed = false;
   for (const combatant of state.npcEncounter) {
-    if (!combatant || combatant.combatRulesVersion === NPC_COMBAT_RULES_VERSION) continue;
+    if (!combatant) continue;
     const template = NPC_STAT_BLOCKS.find((npc) => npc.name === combatant.templateName);
     if (!template) continue;
+    const expectedMaxHp = npcMaximumHp(template);
+    if (combatant.combatRulesVersion === NPC_COMBAT_RULES_VERSION
+      && (template.tier !== 'Legendary' || Number(combatant.maxHp) === expectedMaxHp)) continue;
     const oldMaxHp = Math.max(1, Number(combatant.maxHp) || npcMaximumHp(template));
     const oldHp = clamp(Number(combatant.hp) || 0, 0, oldMaxHp);
-    const newMaxHp = npcMaximumHp(template);
+    const newMaxHp = expectedMaxHp;
     combatant.hp = oldHp === 0 ? 0 : Math.max(1, Math.round(oldHp / oldMaxHp * newMaxHp));
     combatant.maxHp = newMaxHp;
     combatant.ac = npcArmorClass(template);
