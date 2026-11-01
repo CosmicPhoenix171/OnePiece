@@ -1911,11 +1911,22 @@ function diceColorHex(preferences = currentDicePreferences()) {
   return `#${['r', 'g', 'b'].map((key) => Math.round(preferences[key]).toString(16).padStart(2, '0')).join('')}`;
 }
 
+function rollPercentileDice() {
+  const tens = (roll(10) % 10);
+  const ones = (roll(10) % 10);
+  return {
+    tens,
+    ones,
+    total: tens === 0 && ones === 0 ? 100 : tens * 10 + ones
+  };
+}
+
 function rollPlayerDice(sides = 20) {
   const preferences = currentDicePreferences();
-  const first = roll(sides);
+  const rollDie = () => sides === 100 ? rollPercentileDice().total : roll(sides);
+  const first = rollDie();
   const useSecond = preferences.advantage || preferences.disadvantage;
-  const second = useSecond ? roll(sides) : null;
+  const second = useSecond ? rollDie() : null;
   const die = preferences.advantage ? Math.max(first, second)
     : preferences.disadvantage ? Math.min(first, second)
     : first;
@@ -1936,8 +1947,8 @@ function makeD10Geometry() {
   for (let index = 0; index < 5; index += 1) {
     const current = ring[index];
     const next = ring[(index + 1) % 5];
-    positions.push(0, 1.25, 0, ...current, ...next);
-    positions.push(0, -1.25, 0, ...next, ...current);
+    positions.push(0, 1.25, 0, ...next, ...current);
+    positions.push(0, -1.25, 0, ...current, ...next);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -2095,18 +2106,18 @@ function buildDie3d(sides, numberColor, labels = null) {
 }
 
 function buildPercentileDice(numberColor, count) {
-  const onesLabels = Array.from({ length: 10 }, (_, index) => String(index + 1));
+  const onesLabels = Array.from({ length: 10 }, (_, index) => String(index));
   const tensLabels = Array.from({ length: 10 }, (_, index) => String(index * 10).padStart(2, '0'));
   return Array.from({ length: count }, () => {
     const ones = buildDie3d(10, numberColor, onesLabels);
     const tens = buildDie3d(10, numberColor, tensLabels);
     const pair = new THREE.Group();
     const innerScale = count > 1 ? 0.48 : 0.68;
-    ones.group.position.x = count > 1 ? -0.52 : -0.58;
-    tens.group.position.x = count > 1 ? 0.52 : 0.58;
+    tens.group.position.x = count > 1 ? -0.52 : -0.58;
+    ones.group.position.x = count > 1 ? 0.52 : 0.58;
     ones.group.scale.setScalar(innerScale);
     tens.group.scale.setScalar(innerScale);
-    pair.add(ones.group, tens.group);
+    pair.add(tens.group, ones.group);
     return {
       group: pair,
       faces: { ones: ones.faces, tens: tens.faces }
@@ -2201,9 +2212,10 @@ function settleDieFace(group, faces, faceIndex) {
 
 function percentileDiceFaces(value) {
   const total = clamp(Math.trunc(Number(value) || 1), 1, 100);
+  if (total === 100) return { ones: 0, tens: 0 };
   return {
-    ones: total % 10 || 10,
-    tens: Math.floor((total - 1) / 10) * 10
+    ones: total % 10,
+    tens: Math.floor(total / 10)
   };
 }
 
@@ -2245,8 +2257,8 @@ function settleDice3d(value, dieIndex = 0) {
   if (!group || !faces) return;
   if (view.sides === 100) {
     const result = percentileDiceFaces(value);
-    settleDieFace(group.children[0], faces.ones, result.ones - 1);
-    settleDieFace(group.children[1], faces.tens, result.tens / 10);
+    settleDieFace(group.children[0], faces.tens, result.tens);
+    settleDieFace(group.children[1], faces.ones, result.ones);
   } else {
     settleDieFace(group, faces, (Number(value) - 1) % faces.length);
   }
@@ -2256,6 +2268,8 @@ function settleDice3d(value, dieIndex = 0) {
 function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, label = 'Roll', rollDetail = '' }) {
   const overlay = $('#dice-roll-overlay');
   const face = $('#dice-roll-face');
+  const percentileTens = $('[data-percentile-tens]');
+  const percentileOnes = $('[data-percentile-ones]');
   const kind = $('#dice-roll-kind');
   const result = $('#dice-roll-result');
   if (!overlay || !face || !kind || !result) return;
@@ -2269,11 +2283,19 @@ function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, 
   const finalDie = clamp(Number(die) || 1, 1, sides);
   const activeRolls = rolls.length > 1 ? rolls.slice(0, 2) : [finalDie];
   const numericModifier = Number(modifier) || 0;
-  kind.textContent = `${label} · d${sides}`;
+  const setFaceValue = (value) => {
+    if (sides === 100) {
+      const { tens, ones } = percentileDiceFaces(value);
+      if (percentileTens) percentileTens.textContent = String(tens * 10).padStart(2, '0');
+      if (percentileOnes) percentileOnes.textContent = String(ones);
+    }
+    face.textContent = String(value);
+  };
+  kind.textContent = sides === 100 ? `${label} · Percentile d100` : `${label} · d${sides}`;
   face.style.color = numberColor;
   overlay.style.setProperty('--dice-number-color', numberColor);
   result.textContent = 'Rolling…';
-  face.textContent = reducedMotion ? finalDie : roll(sides);
+  setFaceValue(reducedMotion ? finalDie : sides === 100 ? rollPercentileDice().total : roll(sides));
   overlay.classList.remove('settled', 'critical-failure', 'critical-success');
   overlay.classList.add('active', 'rolling');
   overlay.setAttribute('aria-hidden', 'false');
@@ -2281,7 +2303,7 @@ function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, 
 
   const settle = () => {
     clearInterval(diceFaceTimer);
-    face.textContent = finalDie;
+    setFaceValue(finalDie);
     const isCriticalFailure = finalDie === 1;
     const isCriticalSuccess = finalDie === sides;
     if (isCriticalFailure) {
@@ -2323,7 +2345,9 @@ function showDiceRoll({ sides = 20, die, rolls = [], modifier = 0, total = die, 
 
   if (reducedMotion) settle();
   else {
-    diceFaceTimer = setInterval(() => { face.textContent = roll(sides); }, 65);
+    diceFaceTimer = setInterval(() => {
+      setFaceValue(sides === 100 ? rollPercentileDice().total : roll(sides));
+    }, 65);
     diceSettleTimer = setTimeout(settle, 720);
   }
 }
@@ -3912,7 +3936,7 @@ function renderSheetHtml(pc, idx) {
             <label><input type="checkbox" data-dice-disadvantage ${currentDicePreferences().disadvantage ? 'checked' : ''} /> Disadvantage</label>
           </div>
           <div class="dice-options-grid" aria-label="Choose a die to roll">
-            ${[4, 6, 8, 10, 12, 20, 100].map((sides) => `<button type="button" data-die-sides="${sides}" title="Roll a d${sides}">d${sides}</button>`).join('')}
+            ${[4, 6, 8, 10, 12, 20, 100].map((sides) => `<button type="button" data-die-sides="${sides}" title="${sides === 100 ? 'Roll percentile dice' : `Roll a d${sides}`}">d${sides}</button>`).join('')}
           </div>
         </div>
       </details>

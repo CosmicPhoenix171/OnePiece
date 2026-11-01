@@ -385,7 +385,29 @@ body {
   font-weight: bold;
   text-shadow: 0 1px rgba(255,255,255,0.5);
 }
+.dice-percentile-face {
+  display: none;
+  position: relative;
+  z-index: 1;
+  align-items: center;
+  gap: 8px;
+  color: var(--dice-number-color, #201006);
+  font-size: 2rem;
+  font-weight: bold;
+}
+.dice-percentile-face > span {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 66px;
+  border: 2px solid #4c1e0a;
+  border-radius: 12px;
+  background: linear-gradient(145deg, var(--dice-color, var(--gold-bright)), var(--rust));
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35);
+}
 .dice-three-wrap.webgl-unavailable .dice-roll-face { display: block; }
+.dice-three-wrap.webgl-unavailable[data-die-sides="100"] .dice-roll-face { display: none; }
+.dice-three-wrap.webgl-unavailable[data-die-sides="100"] .dice-percentile-face { display: flex; }
 .dice-roll-overlay.rolling .dice-three-wrap { animation: dice-tumble 720ms cubic-bezier(.3,.7,.2,1); }
 .dice-roll-overlay.settled .dice-three-wrap { animation: dice-land 300ms ease-out; }
 .dice-roll-kind,
