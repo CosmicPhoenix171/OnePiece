@@ -2836,10 +2836,8 @@ function statMod(score) {
   return Math.floor((n - 10) / 2);
 }
 function calculateMaxHp(sheet) {
-  const constitutionModifier = statMod(sheet?.stats?.con);
-  return 100 + (constitutionModifier < 0
-    ? constitutionModifier * 10
-    : constitutionModifier * 25);
+  const constitution = Number(sheet?.stats?.con);
+  return (Number.isFinite(constitution) ? constitution : 10) * 10;
 }
 function skillModifier(sheet, skill) {
   const proficient = Boolean(sheet.skillProficiencies?.[skill.key]);
