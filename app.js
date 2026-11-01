@@ -3167,11 +3167,18 @@ function d100ProficiencyBonus(level) {
   const characterLevel = clamp(Math.trunc(Number(level) || 1), 1, 20);
   return 10 + Math.floor((characterLevel - 1) / 4) * 5;
 }
+function skillAttributeModifier(score) {
+  const attribute = Number(score);
+  if (!Number.isFinite(attribute)) return 0;
+  if (attribute === 10) return 0;
+  if (attribute > 10) return attribute;
+  return -10 - ((9 - attribute) * 2);
+}
 function skillModifier(sheet, skill) {
   const proficient = Boolean(sheet.skillProficiencies?.[skill.key]);
   const expertise = proficient && Boolean(sheet.skillExpertise?.[skill.key]);
   const proficiencyBonus = proficient ? d100ProficiencyBonus(sheet.level) : 0;
-  return (Number(sheet.stats?.[skill.ability]) || 0) + proficiencyBonus * (expertise ? 2 : 1);
+  return skillAttributeModifier(sheet.stats?.[skill.ability]) + proficiencyBonus * (expertise ? 2 : 1);
 }
 function calculateArmorClass(sheet) {
   const stats = sheet?.stats || {};
