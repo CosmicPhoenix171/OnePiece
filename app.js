@@ -2839,7 +2839,7 @@ function calculateMaxHp(sheet) {
   const constitutionModifier = statMod(sheet?.stats?.con);
   return 100 + (constitutionModifier < 0
     ? constitutionModifier * 10
-    : constitutionModifier * 100);
+    : constitutionModifier * 25);
 }
 function skillModifier(sheet, skill) {
   const proficient = Boolean(sheet.skillProficiencies?.[skill.key]);
