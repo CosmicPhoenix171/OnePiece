@@ -3846,14 +3846,14 @@ function renderSheetHtml(pc, idx) {
             <thead><tr><th>Result vs. DC</th><th>Outcome</th></tr></thead>
             <tbody>
               <tr class="critical"><td>Natural 1</td><td>Instant Failure</td></tr>
-              <tr><td>11+ below</td><td>Disastrous Failure</td></tr>
-              <tr><td>6–10 below</td><td>Failure</td></tr>
-              <tr><td>1–5 below</td><td>Partial Failure</td></tr>
+              <tr><td>51+ below</td><td>Disastrous Failure</td></tr>
+              <tr><td>26–50 below</td><td>Failure</td></tr>
+              <tr><td>1–25 below</td><td>Partial Failure</td></tr>
               <tr><td>Meets DC</td><td>Narrow Success</td></tr>
-              <tr><td>1–5 above</td><td>Success</td></tr>
-              <tr><td>6–10 above</td><td>Great Success</td></tr>
-              <tr><td>11+ above</td><td>Exceptional Success</td></tr>
-              <tr class="critical"><td>Natural 20</td><td>Instant Success</td></tr>
+              <tr><td>1–25 above</td><td>Success</td></tr>
+              <tr><td>26–50 above</td><td>Great Success</td></tr>
+              <tr><td>51+ above</td><td>Exceptional Success</td></tr>
+              <tr class="critical"><td>Natural 100</td><td>Instant Success</td></tr>
             </tbody>
           </table>
         </div>
@@ -3864,17 +3864,17 @@ function renderSheetHtml(pc, idx) {
           <table>
             <thead><tr><th>DC</th><th>Challenge</th></tr></thead>
             <tbody>
-              <tr><td>5</td><td>Very Easy</td></tr>
-              <tr><td>8</td><td>Easy</td></tr>
-              <tr><td>10</td><td>Routine</td></tr>
-              <tr><td>12</td><td>Moderate</td></tr>
-              <tr><td>15</td><td>Challenging</td></tr>
-              <tr><td>18</td><td>Difficult</td></tr>
-              <tr><td>20</td><td>Very Difficult</td></tr>
-              <tr><td>25</td><td>Extreme</td></tr>
-              <tr><td>30</td><td>Legendary</td></tr>
-              <tr><td>35</td><td>Superhuman</td></tr>
-              <tr><td>40+</td><td>Nearly Impossible</td></tr>
+              <tr><td>25</td><td>Very Easy</td></tr>
+              <tr><td>40</td><td>Easy</td></tr>
+              <tr><td>50</td><td>Routine</td></tr>
+              <tr><td>60</td><td>Moderate</td></tr>
+              <tr><td>75</td><td>Challenging</td></tr>
+              <tr><td>90</td><td>Difficult</td></tr>
+              <tr><td>100</td><td>Very Difficult</td></tr>
+              <tr><td>125</td><td>Extreme</td></tr>
+              <tr><td>150</td><td>Legendary</td></tr>
+              <tr><td>175</td><td>Superhuman</td></tr>
+              <tr><td>200+</td><td>Nearly Impossible</td></tr>
             </tbody>
           </table>
         </div>
@@ -4097,7 +4097,7 @@ function attachSheetHandlers(card, sheet, idx) {
         if (!skill) return;
         label = `${skill.label} Check`;
         modifier = skillModifier(s, skill);
-        sides = 20;
+        sides = 100;
       }
 
       const { die, rolls } = rollPlayerDice(sides);
