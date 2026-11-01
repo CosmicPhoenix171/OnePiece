@@ -434,6 +434,7 @@ document.addEventListener('click', e => {
     case 'uploadSharedImage': if (isGmUser()) $('#shared-image-input')?.click(); break;
     case 'uploadSound': $('#sound-file-input')?.click(); break;
     case 'addSoundFromUrl': addSoundFromUrl(); break;
+    case 'addSoundPageLink': addSoundPageLink(); break;
     case 'resetMapImage':  if (confirm('Remove the current map image?')) { state.mapImageData = ''; state.mapImageName = ''; save(); renderMap(); } break;
     case 'clearMap':       if (confirm('Remove all map markers?')) { state.mapMarkers = []; save(); renderMap(); } break;
     case 'centerShip':     centerOnShip(); break;
@@ -450,7 +451,7 @@ document.addEventListener('click', e => {
     case 'logout':       if (currentUsername) setUsername(''); break;
     case 'exportAll':      exportSave(); break;
     case 'importAll':      importSave(); break;
-    case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(SOUNDS_STORAGE_KEY); location.reload(); } break;
+    case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(SOUNDS_STORAGE_KEY); localStorage.removeItem(SOUND_LINKS_IMPORT_KEY); location.reload(); } break;
   }
 });
 
@@ -748,10 +749,97 @@ async function showSharedImageBroadcast(broadcast) {
 /* ===========================================================
    Local sound library
    =========================================================== */
+const ONE_PIECE_SOUNDBOARD_LINKS = [
+  ['All my do not.', 'https://www.101soundboards.com/sounds/684401-all-my-do-not'],
+  ['Bink No Sake Remix', 'https://www.101soundboards.com/sounds/24230195-bink-no-sake-remix'],
+  ['Binks No Sake Brook', 'https://www.101soundboards.com/sounds/24369755-binks-no-sake-brook'],
+  ['Boa Hancock Mero', 'https://www.101soundboards.com/sounds/24132516-boa-hancock-mero'],
+  ['Den Den Mushi New', 'https://www.101soundboards.com/sounds/26131388-den-den-mushi-new'],
+  ['Donuts', 'https://www.101soundboards.com/sounds/1456591-donuts'],
+  ['Embarrased Face', 'https://www.101soundboards.com/sounds/4149522-embarrased-face-embarrased-moron-whoops-red-face'],
+  ['Gear Fourth Monkey D', 'https://www.101soundboards.com/sounds/1456565-gear-fourth-monkey-d'],
+  ['Gear Second', 'https://www.101soundboards.com/sounds/1456575-gear-second'],
+  ['Gear Second Monkey D', 'https://www.101soundboards.com/sounds/1456586-gear-second-monkey-d'],
+  ['Gear Third', 'https://www.101soundboards.com/sounds/24018977-gear-third'],
+  ['Gear Third Monkey D', 'https://www.101soundboards.com/sounds/1456578-gear-third-monkey-d'],
+  ['Here take a look.', 'https://www.101soundboards.com/sounds/684400-here-take-a-look'],
+  ['Here’s how the story goes', 'https://www.101soundboards.com/sounds/684414-heres-how-the-story-goes-we-find-out-by-the-treasurer-in-the-grandline-theres-no-doubt'],
+  ['Hohoho', 'https://www.101soundboards.com/sounds/684413-hohoho'],
+  ['I got it.', 'https://www.101soundboards.com/sounds/684403-i-got-it'],
+  ['Katakuri Mochi', 'https://www.101soundboards.com/sounds/3971796-katakuri-mochi-one-piece'],
+  ['Katcha', 'https://www.101soundboards.com/sounds/24060734-katcha'],
+  ['Kia course.', 'https://www.101soundboards.com/sounds/684397-kia-course'],
+  ['Konobo show mania', 'https://www.101soundboards.com/sounds/684405-konobo-show-mania-what-itll-taste-it-in-a-bush-racing-style'],
+  ['Kuma’s Laser', 'https://www.101soundboards.com/sounds/1456567-kumas-laser'],
+  ['Let’s Battle', 'https://www.101soundboards.com/sounds/24081026-lets-battle'],
+  ['Monkey D Luffy Hey', 'https://www.101soundboards.com/sounds/24179821-monkey-d-luffy-hey'],
+  ['My friend.', 'https://www.101soundboards.com/sounds/684415-my-friend'],
+  ['Nami asks Luffy for help', 'https://www.101soundboards.com/sounds/1456560-nami-asks-luffy-for-help'],
+  ['No nuts.', 'https://www.101soundboards.com/sounds/684412-no-nuts-you-must-know-nuts'],
+  ['Of Course I Will! (Luffy)', 'https://www.101soundboards.com/sounds/1456554-of-course-i-will-luffy'],
+  ['One Piece', 'https://www.101soundboards.com/sounds/23972126-one-piece'],
+  ['One piece', 'https://www.101soundboards.com/sounds/24133305-one-piece'],
+  ['One Piece Op 2', 'https://www.101soundboards.com/sounds/23972846-one-piece-op-2'],
+  ['One piece alert', 'https://www.101soundboards.com/sounds/24133290-one-piece-alert'],
+  ['One Piece Angry', 'https://www.101soundboards.com/sounds/26117219-one-piece-angry'],
+  ['One piece angry', 'https://www.101soundboards.com/sounds/24133358-one-piece-angry'],
+  ['One Piece Ben Beckman', 'https://www.101soundboards.com/sounds/24133429-one-piece-ben-beckman'],
+  ['One Piece Cornered', 'https://www.101soundboards.com/sounds/24133270-one-piece-cornered'],
+  ['One Piece Kuma Wack', 'https://www.101soundboards.com/sounds/23921582-one-piece-kuma-wack'],
+  ['One Piece Laugh', 'https://www.101soundboards.com/sounds/24252057-one-piece-laugh'],
+  ['One Piece Laugh Nico Robin', 'https://www.101soundboards.com/sounds/3971227-one-piece-laugh-onepiece-laugh-nico-robin-lol'],
+  ['One Piece Op 14', 'https://www.101soundboards.com/sounds/24116282-one-piece-op-14'],
+  ['One piece opening', 'https://www.101soundboards.com/sounds/1456589-one-piece-opening'],
+  ['One Piece Overtaken', 'https://www.101soundboards.com/sounds/26104506-one-piece-overtaken'],
+  ['One Piece Overtaken OST', 'https://www.101soundboards.com/sounds/1456557-one-piece-overtaken-ost'],
+  ['One Piece rap', 'https://www.101soundboards.com/sounds/1456573-one-piece-rap'],
+  ['One Piece Red Hawk OST', 'https://www.101soundboards.com/sounds/23930021-one-piece-red-hawk-ost'],
+  ['One piece remix', 'https://www.101soundboards.com/sounds/24133407-one-piece-remix'],
+  ['One Piece Sad', 'https://www.101soundboards.com/sounds/24133446-one-piece-sad'],
+  ['One Piece SMS', 'https://www.101soundboards.com/sounds/24322914-one-piece-sms'],
+  ['One Piece Soundboard Sound 684398', 'https://www.101soundboards.com/sounds/684398-one-piece-soundboard-sound'],
+  ['One Piece Soundboard Sound 684404', 'https://www.101soundboards.com/sounds/684404-one-piece-soundboard-sound'],
+  ['One Piece Soundboard Sound 684407', 'https://www.101soundboards.com/sounds/684407-one-piece-soundboard-sound'],
+  ['One Piece Soundboard Sound 684408', 'https://www.101soundboards.com/sounds/684408-one-piece-soundboard-sound'],
+  ['One Piece Soundboard Sound 684409', 'https://www.101soundboards.com/sounds/684409-one-piece-soundboard-sound'],
+  ['One Piece Soundboard Sound 684410', 'https://www.101soundboards.com/sounds/684410-one-piece-soundboard-sound'],
+  ['One Piece Soundboard Sound 684411', 'https://www.101soundboards.com/sounds/684411-one-piece-soundboard-sound'],
+  ['One Piece We Are', 'https://www.101soundboards.com/sounds/24357995-one-piece-we-are'],
+  ['ONE PIECE123', 'https://www.101soundboards.com/sounds/24133392-one-piece123'],
+  ['ONE PIECE12356', 'https://www.101soundboards.com/sounds/24133369-one-piece12356'],
+  ['Otama One Piece', 'https://www.101soundboards.com/sounds/24089039-otama-one-piece'],
+  ['Pica’s Laugh', 'https://www.101soundboards.com/sounds/24133341-picas-laugh'],
+  ['Preprepre one piece', 'https://www.101soundboards.com/sounds/24133320-preprepre-one-piece'],
+  ['Room (Law)', 'https://www.101soundboards.com/sounds/1456584-room-law'],
+  ['Sanji', 'https://www.101soundboards.com/sounds/23944236-sanji'],
+  ['Sanji Nami Swan', 'https://www.101soundboards.com/sounds/23944818-sanji-nami-swan'],
+  ['Shanks gives Luffy his hat', 'https://www.101soundboards.com/sounds/1456551-shanks-gives-luffy-his-hat'],
+  ['Sogeking Theme DUB', 'https://www.101soundboards.com/sounds/23921656-sogeking-theme-dub'],
+  ['Super Fart', 'https://www.101soundboards.com/sounds/4152914-super-fart-fart-gross-embarrassing-nasty'],
+  ['Teleport', 'https://www.101soundboards.com/sounds/684406-teleport'],
+  ['The City of Gold is in the Sky! (Luffy)', 'https://www.101soundboards.com/sounds/1456562-the-city-of-gold-is-in-the-sky-luffy'],
+  ['Those kids.', 'https://www.101soundboards.com/sounds/684402-those-kids'],
+  ['Tony Tony Chopper', 'https://www.101soundboards.com/sounds/24058572-tony-tony-chopper'],
+  ['Transponder snail', 'https://www.101soundboards.com/sounds/24133253-transponder-snail'],
+  ['Ussopp', 'https://www.101soundboards.com/sounds/24210944-ussopp'],
+  ['Vergo Finger Pistol', 'https://www.101soundboards.com/sounds/24343438-vergo-finger-pistol'],
+  ['We Are', 'https://www.101soundboards.com/sounds/24070687-we-are'],
+  ['We Are One Piece', 'https://www.101soundboards.com/sounds/24037237-we-are-one-piece'],
+  ['Wendys Mansion 24344397', 'https://www.101soundboards.com/sounds/24344397-wendys-mansion'],
+  ['Wendys Mansion 24026527', 'https://www.101soundboards.com/sounds/24026527-wendys-mansion'],
+  ['Whoosh', 'https://www.101soundboards.com/sounds/1456581-whoosh'],
+  ['X16667', 'https://www.101soundboards.com/sounds/24074742-x16667'],
+  ['Yeah, saddle.', 'https://www.101soundboards.com/sounds/684399-yeah-saddle'],
+  ['Yeah.', 'https://www.101soundboards.com/sounds/684416-yeah'],
+  ['ZEHAHAHA (Edward Teach laugh)', 'https://www.101soundboards.com/sounds/1456570-zehahaha-edward-teach-laugh'],
+];
+const SOUND_LINKS_IMPORT_KEY = 'seaTroubleOnePieceSoundboardLinks.v1';
+
 function loadLocalSounds() {
   try {
     const raw = localStorage.getItem(SOUNDS_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter((sound) => sound && sound.id && sound.src) : [];
   } catch (error) {
     console.warn('Local sounds could not be loaded.', error);
@@ -772,29 +860,67 @@ function saveLocalSounds() {
   }
 }
 
+function importOnePieceSoundboardLinks() {
+  try {
+    if (localStorage.getItem(SOUND_LINKS_IMPORT_KEY) === 'complete') return;
+  } catch (error) {
+    console.error('Could not check soundboard link import status.', error);
+    alert('The soundboard links could not be imported because browser storage is unavailable.');
+    return;
+  }
+  const knownUrls = new Set(localSounds.map((sound) => sound.src));
+  const linksToAdd = ONE_PIECE_SOUNDBOARD_LINKS.filter(([, url]) => !knownUrls.has(url));
+  linksToAdd.forEach(([name, src]) => {
+    const soundId = src.match(/\/sounds\/(\d+)-/i)?.[1];
+    localSounds.push({
+      id: `101soundboards-${soundId || uid()}`,
+      name,
+      category: 'link',
+      kind: 'link',
+      src,
+      addedAt: new Date().toISOString()
+    });
+  });
+  if (!saveLocalSounds()) return;
+  try {
+    localStorage.setItem(SOUND_LINKS_IMPORT_KEY, 'complete');
+  } catch (error) {
+    console.error('Soundboard links were saved, but their import marker could not be stored.', error);
+    alert('The sound links were saved, but browser storage could not mark the import as complete. Deleted links may return after reloading.');
+  }
+}
+
+importOnePieceSoundboardLinks();
+
 function renderSounds() {
   const root = $('#sound-list');
   const summary = $('#sounds-summary');
   if (!root) return;
   const intros = localSounds.filter((sound) => sound.category === 'intro');
   const outros = localSounds.filter((sound) => sound.category === 'outro');
-  if (summary) summary.textContent = `${localSounds.length} local sound${localSounds.length === 1 ? '' : 's'} · ${intros.length} intro${intros.length === 1 ? '' : 's'} · ${outros.length} outro${outros.length === 1 ? '' : 's'}`;
+  const links = localSounds.filter((sound) => sound.kind === 'link');
+  if (summary) summary.textContent = `${localSounds.length} local entr${localSounds.length === 1 ? 'y' : 'ies'} · ${intros.length} intro${intros.length === 1 ? '' : 's'} · ${outros.length} outro${outros.length === 1 ? '' : 's'} · ${links.length} sound page link${links.length === 1 ? '' : 's'}`;
   if (!localSounds.length) {
     root.innerHTML = '<p class="muted sound-empty">Add an intro or outro audio file, or enter an HTTPS audio URL.</p>';
     return;
   }
 
-  root.innerHTML = ['intro', 'outro'].map((category) => {
-    const sounds = localSounds.filter((sound) => sound.category === category);
+  root.innerHTML = ['intro', 'outro', 'link'].map((category) => {
+    const sounds = localSounds.filter((sound) => category === 'link'
+      ? sound.kind === 'link'
+      : sound.kind !== 'link' && sound.category === category);
     if (!sounds.length) return '';
+    const heading = category === 'intro' ? 'Intros' : category === 'outro' ? 'Outros' : 'Soundboard Links';
     return `<section class="sound-group">
-      <h3>${category === 'intro' ? 'Intros' : 'Outros'}</h3>
+      <h3>${heading}</h3>
       ${sounds.map((sound) => `<article class="sound-card" data-sound-id="${esc(sound.id)}">
         <div class="sound-card-heading">
           <strong>${esc(sound.name || 'Untitled sound')}</strong>
           <button type="button" class="danger" data-delete-sound>Delete</button>
         </div>
-        <audio controls preload="metadata" src="${esc(sound.src)}"></audio>
+        ${sound.kind === 'link'
+          ? `<a class="sound-source-link" href="${esc(sound.src)}" target="_blank" rel="noopener noreferrer">Open sound page ↗</a>`
+          : `<audio controls preload="metadata" src="${esc(sound.src)}"></audio>`}
       </article>`).join('')}
     </section>`;
   }).join('');
@@ -820,6 +946,35 @@ function addSoundFromUrl() {
     name: String(nameInput?.value || '').trim() || 'External audio',
     category,
     src: url,
+    addedAt: new Date().toISOString()
+  });
+  if (!saveLocalSounds()) return;
+  if (nameInput) nameInput.value = '';
+  if (urlInput) urlInput.value = '';
+  renderSounds();
+}
+
+function addSoundPageLink() {
+  const nameInput = $('#sound-name');
+  const urlInput = $('#sound-url');
+  const url = String(urlInput?.value || '').trim();
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    alert('Enter a valid HTTPS sound page URL.');
+    return;
+  }
+  if (parsedUrl.protocol !== 'https:') {
+    alert('Sound page links must use HTTPS.');
+    return;
+  }
+  localSounds.unshift({
+    id: uid(),
+    name: String(nameInput?.value || '').trim() || 'Sound page',
+    category: 'link',
+    kind: 'link',
+    src: parsedUrl.href,
     addedAt: new Date().toISOString()
   });
   if (!saveLocalSounds()) return;
