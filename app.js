@@ -2827,6 +2827,12 @@ function statMod(score) {
   if (!Number.isFinite(n)) return 0;
   return Math.floor((n - 10) / 2);
 }
+function calculateMaxHp(sheet) {
+  const constitutionModifier = statMod(sheet?.stats?.con);
+  return 100 + (constitutionModifier < 0
+    ? constitutionModifier * 10
+    : constitutionModifier * 100);
+}
 function skillModifier(sheet, skill) {
   const proficient = Boolean(sheet.skillProficiencies?.[skill.key]);
   const expertise = proficient && Boolean(sheet.skillExpertise?.[skill.key]);
@@ -2888,8 +2894,8 @@ function makeEmptySheet() {
     // Flashback Power-Up (3 charges)
     flashback: 0,
     // Health
-    maxHp: 100,
-    hp: 100,
+    maxHp: calculateMaxHp({ stats }),
+    hp: calculateMaxHp({ stats }),
     tempHp: 0,
     // Scars
     scars: { physical: '', emotional: '', reputation: '' },
@@ -2974,8 +2980,10 @@ function normalizeSheet(pc) {
       merged.bounty = legacyBounty;
     }
   }
+  merged.maxHp = calculateMaxHp(merged);
+  merged.hp = clamp(Number(merged.hp) || 0, 0, merged.maxHp);
   merged.ac = calculateArmorClass(merged);
-  merged.digitalSheetVersion = 3;
+  merged.digitalSheetVersion = 4;
   return merged;
 }
 
@@ -3627,7 +3635,7 @@ function renderSheetHtml(pc, idx) {
               ${field('Initiative', 'initiative', pc.initiative, 'number')}
               ${field('Speed', 'speed', pc.speed, 'number', ' min="0"')}
               ${field('Current HP', 'hp', pc.hp, 'number', ' min="0"')}
-              ${field('Max HP', 'maxHp', pc.maxHp, 'number', ' min="1"')}
+              ${field('Max HP (Constitution)', 'maxHp', pc.maxHp, 'number', ' min="1" readonly title="Calculated from Constitution"')}
               ${field('Temp HP', 'tempHp', pc.tempHp, 'number', ' min="0"')}
             </div>
             <div class="digital-health-controls">
@@ -3890,10 +3898,7 @@ function setSheetValueAtPath(sheet, path, value) {
   else if (path === 'armorBaseAc') value = Math.max(0, Number(value) || 0);
   else if (path === 'level') value = Math.max(1, Number(value) || 1);
   else if (path === 'flashback') value = clamp(Number(value) || 0, 0, 3);
-  else if (path === 'maxHp') {
-    value = Math.max(1, Number(value) || 1);
-    sheet.hp = Math.min(Number(sheet.hp) || 0, value);
-  }
+  else if (path === 'maxHp') value = calculateMaxHp(sheet);
   else if (path === 'hp') value = clamp(Number(value) || 0, 0, Math.max(1, Number(sheet.maxHp) || 1));
   else if (['tempHp', 'bounty', 'berries', 'speed', 'ransom.curseDC'].includes(path)) {
     value = Math.max(0, Number(value) || 0);
@@ -3901,6 +3906,10 @@ function setSheetValueAtPath(sheet, path, value) {
     value = Math.max(0, Number(value) || 0);
   }
   target[key] = value;
+  if (path === 'stats.con') {
+    sheet.maxHp = calculateMaxHp(sheet);
+    sheet.hp = clamp(Number(sheet.hp) || 0, 0, sheet.maxHp);
+  }
   if (path === 'armorBaseAc' || path === 'stats.dex' || path === 'stats.con') {
     sheet.ac = calculateArmorClass(sheet);
   }
