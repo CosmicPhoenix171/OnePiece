@@ -768,7 +768,7 @@ const NPC_STAT_BLOCKS = [
   { name: 'The Drowned Bell', role: 'Haunting sea spirit', tier: 'Boss', ac: 17, hp: 360, speed: 20, stats: [16, 14, 18, 13, 18, 17], attacks: ['Echoing Toll +8 · 4d8 thunder', 'Sinking Note · DC 15 CON or speed becomes 0 until next turn'], traits: ['Mist Form: Can move through creatures and narrow gaps.', 'Deepwater Lure: Pulls one creature 10 ft. closer on a failed WIS save.'] },
   { name: 'Tempest Corsair Lord', role: 'Fleet raider', tier: 'Legendary', ac: 20, hp: 590, speed: 40, stats: [21, 20, 21, 17, 19, 20], attacks: ['Thunderhead Saber +11 · 5d8+6 slashing', 'Squall Burst · 5d10 lightning in a 20-ft. radius'], traits: ['Stormstride: Moves through rain and wind without penalty.', 'Fleet Command: Two allies may move up to half speed after the corsair acts.'] },
   { name: 'Trenchback Leviathan', role: 'Ancient sea beast', tier: 'Legendary', ac: 19, hp: 720, speed: 20, stats: [26, 10, 25, 4, 16, 8], attacks: ['Crushing Bite +12 · 6d10+8 piercing', 'Hullbreaker Roll · 6d8+8 bludgeoning against creatures and ships'], traits: ['Colossal: Occupies a 30-ft. space and can carry creatures on its back.', 'Undertow: When it dives, nearby creatures must pass a DC 18 STR save or be pulled underwater.'] },
-  { name: 'Madame Masquerade', role: 'The Forgotten Couturier · Main Villain', tier: 'Legendary', hp: 60, hpPerPlayer: 60, ac: 30, speed: 30, stats: [12, 20, 18, 19, 14, 22], attacks: ['Needlework Lash · One d100 attack dealing up to 30 damage after AC.', 'Binding Stitch · Wraps an enemy in enchanted silk, temporarily restraining them.'], traits: ['Devil Fruit: Costume-Costume Fruit.', 'Quick Change: Repositions behind stage curtains.', 'Royal Moth: At half HP, gains flight and a powerful wingbeat that can knock enemies backward.'] }
+  { name: 'Madame Masquerade', role: 'The Forgotten Couturier · Main Villain', tier: 'Legendary', hp: 60, ac: 30, speed: 30, stats: [12, 20, 18, 19, 14, 22], attacks: ['Needlework Lash · One d100 attack dealing up to 30 damage after AC.', 'Binding Stitch · Wraps an enemy in enchanted silk, temporarily restraining them.'], traits: ['Devil Fruit: Costume-Costume Fruit.', 'Quick Change: Repositions behind stage curtains.', 'Royal Moth: At half HP, gains flight and a powerful wingbeat that can knock enemies backward.'] }
 ];
 
 const NPC_TIER_HIT_POINTS = {
@@ -777,19 +777,15 @@ const NPC_TIER_HIT_POINTS = {
   Elite: 200,
   Boss: 300,
 };
-const NPC_COMBAT_RULES_VERSION = 3;
+const NPC_COMBAT_RULES_VERSION = 4;
 
 function npcMaximumHp(npc) {
-  if (Number.isFinite(Number(npc.hpPerPlayer))) {
-    const activePlayers = Math.max(1, (Array.isArray(state.playerSheets) ? state.playerSheets : [])
-      .filter((sheet) => sheet && sheet.combatEnabled !== false).length);
-    return activePlayers * Number(npc.hpPerPlayer);
-  }
   if (npc.tier === 'Legendary') {
     const activePlayers = Math.max(1, (Array.isArray(state.playerSheets) ? state.playerSheets : [])
       .filter((sheet) => sheet && sheet.combatEnabled !== false).length);
-    const ransomPieces = Math.max(0, Number(state.piecesHeld) || 0);
-    return activePlayers * (100 + 10 * ransomPieces);
+    const constitution = Number(npc.stats?.[2]);
+    const constitutionHp = (Number.isFinite(constitution) ? constitution : 10) * 10;
+    return activePlayers * 60 + constitutionHp;
   }
   return NPC_TIER_HIT_POINTS[npc.tier] || NPC_TIER_HIT_POINTS.Standard;
 }
