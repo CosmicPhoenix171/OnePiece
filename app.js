@@ -1148,9 +1148,9 @@ function addNpcToEncounter(templateName) {
   const matching = state.npcEncounter.filter((entry) => entry.templateName === npc.name).length;
   const name = matching ? `${npc.name} ${matching + 1}` : npc.name;
   const die = roll(20);
-  const modifier = statMod(npc.stats[1]);
+  const modifier = Number(npc.stats[1]) || 0;
   const initiative = die + modifier;
-  const detail = `${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} DEX = ${initiative}`;
+  const detail = `${die} + ${modifier} DEX = ${initiative}`;
   state.npcEncounter.push({
     id: uid(),
     templateName: npc.name,
@@ -1345,7 +1345,7 @@ function combatantCardHtml(combatant, turn) {
   const isActive = turn.started && turn.activeId === combatant.id && combatant.hp > 0 && combatant.enabled;
   const defeated = combatant.hp <= 0;
   const initiative = combatant.canRollInitiative
-    ? `<button type="button" class="combatant-initiative combatant-initiative-roll" data-roll-initiative="${esc(combatant.id)}" aria-label="Roll initiative for ${esc(combatant.name)}" title="Roll d20 + Dexterity modifier"><span>INIT</span><b>${combatant.initiative}</b></button>`
+    ? `<button type="button" class="combatant-initiative combatant-initiative-roll" data-roll-initiative="${esc(combatant.id)}" aria-label="Roll initiative for ${esc(combatant.name)}" title="Roll d20 + full Dexterity score"><span>INIT</span><b>${combatant.initiative}</b></button>`
     : `<span class="combatant-initiative"><span>INIT</span><b>${combatant.initiative}</b></span>`;
   const avatar = combatant.portrait
     ? `<img src="${esc(combatant.portrait)}" alt="" />`
@@ -1783,9 +1783,9 @@ function rollCharacterInitiative(combatantId) {
   if (!sheet || !isSheetOwner(sheet)) return;
 
   const die = roll(20);
-  const modifier = statMod(sheet.stats?.dex);
+  const modifier = Number(sheet.stats?.dex) || 0;
   const total = die + modifier;
-  const detail = `${die} ${modifier >= 0 ? '+' : '−'} ${Math.abs(modifier)} DEX = ${total}`;
+  const detail = `${die} + ${modifier} DEX = ${total}`;
   sheet.initiative = total;
   stampSheetEdit(sheet);
   recordRoll({
@@ -3139,10 +3139,15 @@ function calculateMaxHp(sheet) {
   const constitution = Number(sheet?.stats?.con);
   return (Number.isFinite(constitution) ? constitution : 10) * 10;
 }
+function d100ProficiencyBonus(level) {
+  const characterLevel = clamp(Math.trunc(Number(level) || 1), 1, 20);
+  return 10 + Math.floor((characterLevel - 1) / 4) * 5;
+}
 function skillModifier(sheet, skill) {
   const proficient = Boolean(sheet.skillProficiencies?.[skill.key]);
   const expertise = proficient && Boolean(sheet.skillExpertise?.[skill.key]);
-  return statMod(sheet.stats[skill.ability]) + (expertise ? 10 : proficient ? 5 : 0);
+  const proficiencyBonus = proficient ? d100ProficiencyBonus(sheet.level) : 0;
+  return (Number(sheet.stats?.[skill.ability]) || 0) + proficiencyBonus * (expertise ? 2 : 1);
 }
 function calculateArmorClass(sheet) {
   const stats = sheet?.stats || {};
@@ -3233,6 +3238,7 @@ function normalizeSheet(pc) {
   const base = makeEmptySheet();
   const merged = Object.assign(base, pc);
   merged.stats = Object.assign({}, base.stats, pc.stats || {});
+  merged.level = clamp(Math.trunc(Number(pc.level) || 1), 1, 20);
   const armorBaseAc = Number(pc.armorBaseAc);
   merged.armorBaseAc = Number.isFinite(armorBaseAc) ? Math.max(0, armorBaseAc) : base.armorBaseAc;
   merged.scars = Object.assign({}, base.scars, pc.scars || {});
@@ -3711,9 +3717,6 @@ function refreshDigitalSheetValues(card, sheet) {
     const score = sheet.stats[el.dataset.statScoreDisplay];
     if (score !== undefined) el.textContent = String(score);
   });
-  $$('[data-stat-mod]', card).forEach((el) => {
-    el.textContent = fmtMod(statMod(sheet.stats[el.dataset.statMod]));
-  });
   $$('[data-skill-mod]', card).forEach((el) => {
     const skill = SKILL_DEFS.find((definition) => definition.key === el.dataset.skillMod);
     if (!skill) return;
@@ -3782,12 +3785,10 @@ function renderSheetHtml(pc, idx) {
   const statInputs = STAT_DEFS.map((stat) => abilitiesUnlocked ? `
     <label class="digital-stat">${stat.label}
       <input type="number" min="1" max="30" data-sheet-path="stats.${stat.key}" data-stat-score="${stat.key}" value="${esc(pc.stats[stat.key])}"${disabled} />
-      <span class="digital-modifier" data-stat-mod="${stat.key}">${fmtMod(statMod(pc.stats[stat.key]))}</span>
     </label>` : `
     <button type="button" class="digital-stat digital-stat-roll" data-roll-ability="${stat.key}" aria-label="Roll ${stat.label} check">
       <span>${stat.label}</span>
       <strong data-stat-score-display="${stat.key}">${esc(pc.stats[stat.key])}</strong>
-      <span class="digital-modifier" data-stat-mod="${stat.key}">${fmtMod(statMod(pc.stats[stat.key]))}</span>
     </button>`).join('');
   const skills = SKILL_DEFS.map((skill) => abilitiesUnlocked ? `
     <div class="digital-skill">
@@ -3826,7 +3827,7 @@ function renderSheetHtml(pc, idx) {
           ${field('Crew Role', 'role', pc.role)}
           ${field('Age', 'age', pc.age)}
           ${field('Home Sea / Island', 'home', pc.home)}
-          ${field('Level', 'level', pc.level, 'number', ' min="1"')}
+          ${field('Level', 'level', pc.level, 'number', ' min="1" max="20" step="1"')}
           ${field('Devil Fruit', 'devilFruit', pc.devilFruit)}
           ${textarea('Home Sea / Island Notes', 'homeNotes', pc.homeNotes, 2, true)}
           ${textarea('Character Description', 'portraitDescription', pc.portraitDescription, 2, true)}
@@ -3877,6 +3878,22 @@ function renderSheetHtml(pc, idx) {
               <tr><td>200+</td><td>Nearly Impossible</td></tr>
             </tbody>
           </table>
+        </div>
+      </details>
+      <details class="sheet-reference sheet-reference-proficiency">
+        <summary>Proficiency &amp; Expertise</summary>
+        <div class="sheet-reference-panel">
+          <table>
+            <thead><tr><th>Level</th><th>Vanilla</th><th>d100 Prof.</th><th>d100 Expertise</th></tr></thead>
+            <tbody>
+              <tr><td>1–4</td><td>+2</td><td>+10</td><td>+20</td></tr>
+              <tr><td>5–8</td><td>+3</td><td>+15</td><td>+30</td></tr>
+              <tr><td>9–12</td><td>+4</td><td>+20</td><td>+40</td></tr>
+              <tr><td>13–16</td><td>+5</td><td>+25</td><td>+50</td></tr>
+              <tr><td>17–20</td><td>+6</td><td>+30</td><td>+60</td></tr>
+            </tbody>
+          </table>
+          <p>Skill checks use d100 + full ability score + skill bonus. Expertise replaces the normal proficiency bonus with twice that bonus.</p>
         </div>
       </details>
       <details class="sheet-reference sheet-reference-dice">
@@ -4205,7 +4222,7 @@ function setSheetValueAtPath(sheet, path, value) {
   const key = keys[keys.length - 1];
   if (path.startsWith('stats.')) value = clamp(Number(value) || 1, 1, 30);
   else if (path === 'armorBaseAc') value = Math.max(0, Number(value) || 0);
-  else if (path === 'level') value = Math.max(1, Number(value) || 1);
+  else if (path === 'level') value = clamp(Math.trunc(Number(value) || 1), 1, 20);
   else if (path === 'flashback') value = clamp(Number(value) || 0, 0, 3);
   else if (path === 'maxHp') value = calculateMaxHp(sheet);
   else if (path === 'hp') value = clamp(Number(value) || 0, 0, Math.max(1, Number(sheet.maxHp) || 1));
