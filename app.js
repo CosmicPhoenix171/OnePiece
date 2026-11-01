@@ -1066,7 +1066,14 @@ const NPC_STAT_BLOCKS = [
   { name: 'The Drowned Bell', role: 'Haunting sea spirit', tier: 'Boss', ac: 17, hp: 360, speed: 20, stats: [16, 14, 18, 13, 18, 17], attacks: ['Echoing Toll +8 · 4d8 thunder', 'Sinking Note · DC 15 CON or speed becomes 0 until next turn'], traits: ['Mist Form: Can move through creatures and narrow gaps.', 'Deepwater Lure: Pulls one creature 10 ft. closer on a failed WIS save.'] },
   { name: 'Tempest Corsair Lord', role: 'Fleet raider', tier: 'Legendary', ac: 20, hp: 590, speed: 40, stats: [21, 20, 21, 17, 19, 20], attacks: ['Thunderhead Saber +11 · 5d8+6 slashing', 'Squall Burst · 5d10 lightning in a 20-ft. radius'], traits: ['Stormstride: Moves through rain and wind without penalty.', 'Fleet Command: Two allies may move up to half speed after the corsair acts.'] },
   { name: 'Trenchback Leviathan', role: 'Ancient sea beast', tier: 'Legendary', ac: 19, hp: 720, speed: 20, stats: [26, 10, 25, 4, 16, 8], attacks: ['Crushing Bite +12 · 6d10+8 piercing', 'Hullbreaker Roll · 6d8+8 bludgeoning against creatures and ships'], traits: ['Colossal: Occupies a 30-ft. space and can carry creatures on its back.', 'Undertow: When it dives, nearby creatures must pass a DC 18 STR save or be pulled underwater.'] },
-  { name: 'Madame Masquerade', role: 'The Forgotten Couturier · Main Villain', tier: 'Legendary', hp: 60, ac: 30, speed: 30, stats: [12, 20, 18, 19, 14, 22], attacks: ['Needlework Lash · One d100 attack dealing up to 30 damage after AC.', 'Binding Stitch · Wraps an enemy in enchanted silk, temporarily restraining them.'], traits: ['Devil Fruit: Costume-Costume Fruit.', 'Quick Change: Repositions behind stage curtains.', 'Royal Moth: At half HP, gains flight and a powerful wingbeat that can knock enemies backward.'] }
+  { name: 'Madame Masquerade', role: 'The Forgotten Couturier · Main Villain', tier: 'Legendary', hp: 60, ac: 30, speed: 30, stats: [12, 20, 18, 19, 14, 22], attacks: ['Needlework Lash · One d100 attack dealing up to 30 damage after AC.', 'Binding Stitch · Wraps an enemy in enchanted silk, temporarily restraining them.'], traits: ['Devil Fruit: Costume-Costume Fruit.', 'Quick Change: Repositions behind stage curtains.', 'Royal Moth: At half HP, gains flight and a powerful wingbeat that can knock enemies backward.'] },
+  { name: 'Toy Soldier Usher', role: 'Common enemy', tier: 'Minion', ac: 20, hp: 40, speed: 30, stats: [14, 12, 14, 8, 9, 8], haki: 6, fixedVitals: true, attacks: ['Toy Bayonet · d100 − AC, maximum 15 damage.'], traits: ['Marching Formation: +10 to attack rolls while within 10 ft. of another toy soldier.', 'Golden Button: Shoulder.'] },
+  { name: 'Skeleton Pirate', role: 'Common enemy', tier: 'Minion', ac: 22, hp: 65, speed: 30, stats: [13, 19, 12, 9, 10, 12], haki: 5, fixedVitals: true, attacks: ['Bone Cutlass · d100 − AC, maximum 15 damage.'], traits: ['Fall Apart: Once per fight, avoids one attack by collapsing into bones; spends its next action reassembling.', 'Golden Button: Inside its pirate hat.'] },
+  { name: 'Bakery Werewolf', role: 'Standard enemy', tier: 'Standard', ac: 24, hp: 110, speed: 40, stats: [22, 18, 19, 8, 13, 7], haki: 6, fixedVitals: true, attacks: ['Wolf Claws · d100 − AC, maximum 20 damage.', 'Pounce: Move up to 20 ft. and attack. If it deals damage, target makes a DC 60 STR or DEX check or falls prone.'], traits: ['Keen Smell: Can track nearby characters by scent.'] },
+  { name: 'Count Gourdy — Vampire Mayor', role: 'Standard enemy', tier: 'Standard', ac: 25, hp: 100, speed: 30, stats: [16, 18, 17, 14, 11, 22], haki: 8, fixedVitals: true, attacks: ['Vampire Bite · d100 − AC, maximum 20 damage.', 'Hypnotic Gaze: A target within 30 ft. makes a DC 60 WIS check. On failure, it cannot move closer to or attack Gourdy until the end of its next turn.', 'Bat Transformation: Once per fight, becomes a swarm of bats and moves 40 ft. without provoking attacks.'], traits: ['Golden Button: Cape clasp.'] },
+  { name: 'Pumpkin Knight', role: 'Elite enemy', tier: 'Elite', ac: 28, hp: 130, speed: 25, stats: [24, 10, 22, 7, 10, 12], haki: 5, fixedVitals: true, attacks: ['Pumpkin Greatsword · d100 − AC, maximum 25 damage.', 'Head Toss: Throws its pumpkin head up to 30 ft. Targets within 10 ft. of impact make a DC 60 DEX check or take 15 damage; the knight spends its next action retrieving or regrowing its head.'], traits: ['Heavy Armor: Cannot be knocked prone by ordinary physical attacks.', 'Golden Button: Chest armor.'] },
+  { name: 'Three-Headed Dragon', role: 'Elite enemy', tier: 'Elite', ac: 30, hp: 210, speed: 30, stats: [26, 12, 23, 10, 11, 8], haki: 5, fixedVitals: true, attacks: ['Dragon Bite · d100 − AC, maximum 25 damage.', 'Triple Breath: Once every 3 rounds, all three heads breathe fire in a 20-ft. cone. Each target makes a DC 60 DEX check, taking 25 damage on failure or 10 on success.'], traits: ['Three Opinions: On an attack roll of 1–10, the heads argue and the action is wasted.', 'Golden Button: Middle-neck medallion.'] },
+  { name: 'Bruno — Stitched Giant', role: 'Mini-boss', tier: 'Mini-boss', ac: 30, hp: 280, speed: 30, stats: [35, 8, 30, 7, 9, 10], haki: 5, fixedVitals: true, attacks: ['Giant Fist · d100 − AC, maximum 35 damage.', 'Ground Pound: All creatures within 15 ft. make a DC 60 DEX check. Failure causes 25 damage and knocks them prone; success halves damage.'], traits: ['Unstoppable: Cannot be pushed or knocked prone by creatures smaller than him without a special ability.', 'Golden Button: Large collar button. While Bruno stands, reaching it requires a DC 80 check instead of 60.'] }
 ];
 
 const NPC_TIER_HIT_POINTS = {
@@ -1078,6 +1085,7 @@ const NPC_TIER_HIT_POINTS = {
 const NPC_COMBAT_RULES_VERSION = 4;
 
 function npcMaximumHp(npc) {
+  if (npc.fixedVitals) return npc.hp;
   if (npc.tier === 'Legendary') {
     const activePlayers = Math.max(1, (Array.isArray(state.playerSheets) ? state.playerSheets : [])
       .filter((sheet) => sheet && sheet.combatEnabled !== false).length);
@@ -1089,6 +1097,7 @@ function npcMaximumHp(npc) {
 }
 
 function npcArmorClass(npc) {
+  if (npc.fixedVitals) return npc.ac;
   const dexterity = Number(npc.stats?.[1]);
   const constitution = Number(npc.stats?.[2]);
   const dexScore = Number.isFinite(dexterity) ? dexterity : 10;
@@ -1133,7 +1142,7 @@ function npcCardHtml(npc) {
   return `<article class="npc-stat-card" data-npc-search="${esc(JSON.stringify(npc).toLowerCase())}">
     <header><div><h3>${esc(npc.name)}</h3><p>${esc(npc.role)}</p></div><span>${esc(npc.tier)}</span></header>
     <div class="npc-vitals"><b>AC ${npcArmorClass(npc)}</b><b>HP ${npcMaximumHp(npc)}</b><b>Speed ${npc.speed} ft.</b></div>
-    <div class="npc-abilities">${abilities.map((ability, index) => `<div><b>${ability}</b><span>${npc.stats[index]} (${npcModifier(npc.stats[index])})</span></div>`).join('')}</div>
+    <div class="npc-abilities${npc.haki !== undefined ? ' npc-abilities-haki' : ''}">${abilities.map((ability, index) => `<div><b>${ability}</b><span>${npc.stats[index]} (${npcModifier(npc.stats[index])})</span></div>`).join('')}${npc.haki !== undefined ? `<div><b>HAKI</b><span>${npc.haki}</span></div>` : ''}</div>
     <section><h4>Actions</h4>${npc.attacks.map((attack) => `<p>${esc(attack)}</p>`).join('')}</section>
     <section><h4>Traits</h4>${npc.traits.map((trait) => `<p>${esc(trait)}</p>`).join('')}</section>
     <footer><button type="button" data-add-npc="${esc(npc.name)}">Add to Encounter</button></footer>
@@ -1219,18 +1228,50 @@ function renderNpcCards() {
   const root = $('#npc-card-list');
   if (!root || !isGmUser()) return;
   const query = ($('#npc-search')?.value || '').trim().toLowerCase();
-  const matches = NPC_STAT_BLOCKS.filter((npc) => JSON.stringify(npc).toLowerCase().includes(query));
-  root.innerHTML = matches.map(npcCardHtml).join('') || '<p class="muted npc-empty">No NPC stat blocks match that search.</p>';
+  const tier = $('#npc-tier-filter')?.value || '';
+  const haki = $('#npc-haki-filter')?.value || '';
+  const matches = NPC_STAT_BLOCKS.filter((npc) => {
+    const matchesSearch = !query || JSON.stringify(npc).toLowerCase().includes(query);
+    const matchesTier = !tier || npc.tier === tier;
+    const matchesHaki = !haki
+      || (haki === 'none' ? npc.haki === undefined : Number(npc.haki) === Number(haki));
+    return matchesSearch && matchesTier && matchesHaki;
+  });
+  root.innerHTML = matches.map(npcCardHtml).join('') || '<p class="muted npc-empty">No NPC stat blocks match the selected filters.</p>';
   const count = $('#npc-result-count');
   if (count) count.textContent = `${matches.length} stat block${matches.length === 1 ? '' : 's'}`;
 }
 
+function populateNpcFilters() {
+  const tierFilter = $('#npc-tier-filter');
+  if (tierFilter) {
+    const tiers = [...new Set(NPC_STAT_BLOCKS.map((npc) => npc.tier))];
+    tierFilter.innerHTML = '<option value="">All tiers</option>'
+      + tiers.map((tier) => `<option value="${esc(tier)}">${esc(tier)}</option>`).join('');
+  }
+  const hakiFilter = $('#npc-haki-filter');
+  if (hakiFilter) {
+    const hakiScores = [...new Set(NPC_STAT_BLOCKS
+      .filter((npc) => Number.isFinite(npc.haki))
+      .map((npc) => npc.haki))].sort((a, b) => a - b);
+    hakiFilter.innerHTML = '<option value="">Any Haki</option><option value="none">No Haki score</option>'
+      + hakiScores.map((score) => `<option value="${score}">Haki ${score}</option>`).join('');
+  }
+}
+
 function initNpcTab() {
+  populateNpcFilters();
   $('#npc-search')?.addEventListener('input', renderNpcCards);
+  $('#npc-tier-filter')?.addEventListener('change', renderNpcCards);
+  $('#npc-haki-filter')?.addEventListener('change', renderNpcCards);
   $('#npc-random')?.addEventListener('click', () => {
     const npc = pick(NPC_STAT_BLOCKS);
     const search = $('#npc-search');
     if (search) search.value = npc.name;
+    const tierFilter = $('#npc-tier-filter');
+    const hakiFilter = $('#npc-haki-filter');
+    if (tierFilter) tierFilter.value = '';
+    if (hakiFilter) hakiFilter.value = '';
     renderNpcCards();
   });
   $('#npc-card-list')?.addEventListener('click', (event) => {
