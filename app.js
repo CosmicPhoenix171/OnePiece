@@ -915,7 +915,7 @@ function renderSounds() {
       <h3>${heading}</h3>
       ${sounds.map((sound) => `<article class="sound-card" data-sound-id="${esc(sound.id)}">
         <div class="sound-card-heading">
-          <strong>${esc(sound.name || 'Untitled sound')}</strong>
+          <input type="text" data-sound-name value="${esc(sound.name || '')}" maxlength="100" aria-label="Sound name" />
           <button type="button" class="danger" data-delete-sound>Delete</button>
         </div>
         ${sound.kind === 'link'
@@ -1026,6 +1026,17 @@ function bindSounds() {
     localSounds.splice(index, 1);
     saveLocalSounds();
     renderSounds();
+  });
+
+  $('#sound-list')?.addEventListener('change', (event) => {
+    const input = event.target.closest('[data-sound-name]');
+    if (!input) return;
+    const card = input.closest('[data-sound-id]');
+    const sound = localSounds.find((entry) => entry.id === card?.dataset.soundId);
+    if (!sound) return;
+    sound.name = input.value.trim().slice(0, 100) || 'Untitled sound';
+    if (!saveLocalSounds()) return;
+    input.value = sound.name;
   });
 }
 

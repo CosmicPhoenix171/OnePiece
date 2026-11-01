@@ -1172,6 +1172,7 @@ button.danger { background: var(--blood); color: #fff; border-color: #3a0a0a; }
   background: rgba(255,255,255,0.45);
 }
 .sound-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sound-card-heading input { flex: 1; min-width: 0; }
 .sound-card audio { width: 100%; }
 .sound-source-link { justify-self: start; font-weight: bold; }
 .sound-empty { padding: 28px 0; text-align: center; }
