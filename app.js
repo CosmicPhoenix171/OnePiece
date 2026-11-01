@@ -4,6 +4,7 @@
 
 const STORAGE_KEY = 'seaTroubleSystem.v1';
 const USERNAME_KEY = 'seaTroubleUser.v1';
+const SOUNDS_STORAGE_KEY = 'seaTroubleSounds.v1';
 const DEFAULT_MAP_IMAGE = 'assets/oneMap.jpeg';
 
 /* ---------- Default state ---------- */
@@ -431,6 +432,8 @@ document.addEventListener('click', e => {
     case 'addShipLog':     addShipLogEntry(); break;
     case 'importMap':      importMapImage(); break;
     case 'uploadSharedImage': if (isGmUser()) $('#shared-image-input')?.click(); break;
+    case 'uploadSound': $('#sound-file-input')?.click(); break;
+    case 'addSoundFromUrl': addSoundFromUrl(); break;
     case 'resetMapImage':  if (confirm('Remove the current map image?')) { state.mapImageData = ''; state.mapImageName = ''; save(); renderMap(); } break;
     case 'clearMap':       if (confirm('Remove all map markers?')) { state.mapMarkers = []; save(); renderMap(); } break;
     case 'centerShip':     centerOnShip(); break;
@@ -447,7 +450,7 @@ document.addEventListener('click', e => {
     case 'logout':       if (currentUsername) setUsername(''); break;
     case 'exportAll':      exportSave(); break;
     case 'importAll':      importSave(); break;
-    case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); } break;
+    case 'resetAll':       if (confirm('Erase all campaign data?')) { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(SOUNDS_STORAGE_KEY); location.reload(); } break;
   }
 });
 
@@ -740,6 +743,135 @@ async function showSharedImageBroadcast(broadcast) {
   overlay.classList.add('active');
   overlay.setAttribute('aria-hidden', 'false');
   $('#close-shared-image-broadcast')?.focus();
+}
+
+/* ===========================================================
+   Local sound library
+   =========================================================== */
+function loadLocalSounds() {
+  try {
+    const raw = localStorage.getItem(SOUNDS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((sound) => sound && sound.id && sound.src) : [];
+  } catch (error) {
+    console.warn('Local sounds could not be loaded.', error);
+    return [];
+  }
+}
+
+let localSounds = loadLocalSounds();
+
+function saveLocalSounds() {
+  try {
+    localStorage.setItem(SOUNDS_STORAGE_KEY, JSON.stringify(localSounds));
+    return true;
+  } catch (error) {
+    console.error('Local sounds could not be saved.', error);
+    alert('The sound could not be saved. The file may be too large for browser storage.');
+    return false;
+  }
+}
+
+function renderSounds() {
+  const root = $('#sound-list');
+  const summary = $('#sounds-summary');
+  if (!root) return;
+  const intros = localSounds.filter((sound) => sound.category === 'intro');
+  const outros = localSounds.filter((sound) => sound.category === 'outro');
+  if (summary) summary.textContent = `${localSounds.length} local sound${localSounds.length === 1 ? '' : 's'} · ${intros.length} intro${intros.length === 1 ? '' : 's'} · ${outros.length} outro${outros.length === 1 ? '' : 's'}`;
+  if (!localSounds.length) {
+    root.innerHTML = '<p class="muted sound-empty">Add an intro or outro audio file, or enter an HTTPS audio URL.</p>';
+    return;
+  }
+
+  root.innerHTML = ['intro', 'outro'].map((category) => {
+    const sounds = localSounds.filter((sound) => sound.category === category);
+    if (!sounds.length) return '';
+    return `<section class="sound-group">
+      <h3>${category === 'intro' ? 'Intros' : 'Outros'}</h3>
+      ${sounds.map((sound) => `<article class="sound-card" data-sound-id="${esc(sound.id)}">
+        <div class="sound-card-heading">
+          <strong>${esc(sound.name || 'Untitled sound')}</strong>
+          <button type="button" class="danger" data-delete-sound>Delete</button>
+        </div>
+        <audio controls preload="metadata" src="${esc(sound.src)}"></audio>
+      </article>`).join('')}
+    </section>`;
+  }).join('');
+}
+
+function addSoundFromUrl() {
+  const nameInput = $('#sound-name');
+  const urlInput = $('#sound-url');
+  const category = $('#sound-category')?.value === 'outro' ? 'outro' : 'intro';
+  const url = String(urlInput?.value || '').trim();
+  if (!url || !/^https?:\/\//i.test(url)) {
+    alert('Enter a valid HTTPS audio URL.');
+    return;
+  }
+  try {
+    new URL(url);
+  } catch {
+    alert('Enter a valid audio URL.');
+    return;
+  }
+  localSounds.unshift({
+    id: uid(),
+    name: String(nameInput?.value || '').trim() || 'External audio',
+    category,
+    src: url,
+    addedAt: new Date().toISOString()
+  });
+  if (!saveLocalSounds()) return;
+  if (nameInput) nameInput.value = '';
+  if (urlInput) urlInput.value = '';
+  renderSounds();
+}
+
+function bindSounds() {
+  const input = $('#sound-file-input');
+  input?.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('audio/')) {
+      alert('Please choose an audio file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = String(reader.result || '');
+      if (!data.startsWith('data:audio/')) {
+        alert('The selected audio could not be read.');
+        return;
+      }
+      const category = $('#sound-category')?.value === 'outro' ? 'outro' : 'intro';
+      localSounds.unshift({
+        id: uid(),
+        name: String($('#sound-name')?.value || '').trim() || file.name.replace(/\.[^.]+$/, ''),
+        category,
+        src: data,
+        addedAt: new Date().toISOString()
+      });
+      if (!saveLocalSounds()) return;
+      const nameInput = $('#sound-name');
+      if (nameInput) nameInput.value = '';
+      renderSounds();
+    };
+    reader.onerror = () => alert('The selected audio could not be read.');
+    reader.readAsDataURL(file);
+  });
+
+  $('#sound-list')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-delete-sound]');
+    if (!button) return;
+    const card = button.closest('[data-sound-id]');
+    const index = localSounds.findIndex((sound) => sound.id === card?.dataset.soundId);
+    if (index < 0 || !confirm('Delete this local sound?')) return;
+    localSounds.splice(index, 1);
+    saveLocalSounds();
+    renderSounds();
+  });
 }
 
 /* ===========================================================
@@ -4620,6 +4752,8 @@ renderPlayerSheets();
 initNpcTab();
 updateGmOnlyUI();
 initCombatTracker();
+bindSounds();
+renderSounds();
 renderSharedImages();
 renderTravel();
 renderShip();

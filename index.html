@@ -50,6 +50,7 @@
     <div id="tabs-menu" class="tabs-menu-list">
       <button class="tab active" data-tab="map">Map</button>
       <button class="tab" data-tab="images">Shared Images</button>
+      <button class="tab" data-tab="sounds">Sounds</button>
       <button class="tab" data-tab="ship">Ship Tracker</button>
       <button class="tab" data-tab="characters">Player Sheets</button>
       <button class="tab" data-tab="combat">Combat</button>
@@ -144,6 +145,33 @@
         </div>
       </div>
       <div id="shared-image-list" class="shared-image-list" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- SOUNDS -->
+  <section class="panel" id="tab-sounds">
+    <div class="parchment">
+      <div class="sounds-header">
+        <div>
+          <h2>Sounds</h2>
+          <p class="muted">Local audio library for intros and outros. Add audio files you own or URLs you control.</p>
+        </div>
+        <div class="sound-actions">
+          <label class="sound-category-picker">Category
+            <select id="sound-category">
+              <option value="intro">Intro</option>
+              <option value="outro">Outro</option>
+            </select>
+          </label>
+          <input id="sound-name" type="text" maxlength="100" placeholder="Sound name" aria-label="Sound name" />
+          <input id="sound-url" type="url" maxlength="2000" placeholder="https://example.com/audio.mp3" aria-label="Audio URL" />
+          <button type="button" class="gold" data-action="addSoundFromUrl">Add URL</button>
+          <button type="button" data-action="uploadSound">Upload Audio</button>
+          <input type="file" id="sound-file-input" accept="audio/*" class="hidden" aria-label="Upload audio file" />
+        </div>
+      </div>
+      <p id="sounds-summary" class="muted"></p>
+      <div id="sound-list" class="sound-list" aria-live="polite"></div>
     </div>
   </section>
 
